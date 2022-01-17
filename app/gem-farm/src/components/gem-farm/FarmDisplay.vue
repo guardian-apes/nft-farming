@@ -20,19 +20,19 @@
   <div class="flex">
     <!--reward A-->
     <div class="flex-1 mr-5">
-      <RewardDisplay
+      <!-- <RewardDisplay
         :key="farmAcc.rewardA"
         :reward="farmAcc.rewardA"
         title="Reward A"
-      />
+      /> -->
     </div>
     <!--reward B-->
     <div class="flex-1">
-      <RewardDisplay
+      <!-- <RewardDisplay
         :key="farmAcc.rewardB"
         :reward="farmAcc.rewardB"
         title="Reward B"
-      />
+      /> -->
     </div>
   </div>
 </template>

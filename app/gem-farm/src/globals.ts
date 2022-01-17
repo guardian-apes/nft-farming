@@ -4,9 +4,9 @@ export const DEFAULTS = {
   CLUSTER: 'devnet',
   //todo these need to be PER cluster
   GEM_BANK_PROG_ID: new PublicKey(
-    '2Kezyz4zLTv8wDoD2t2KKsb76p5KTC3MjVpquoAxTY5V'
+    '7KRu52tpJ4hb9qdk4FsBMrWaZxkWt49o6kbW7QMrutc8'
   ),
   GEM_FARM_PROG_ID: new PublicKey(
-    '2VMTQBkVcwaYj2VJH1EB1hSa8bv8Dij5sCEtfWJMoFGK'
+    '38yr6ZVQecngTXbad8pj4nbbGdudDHfgfpD6xQJAJG1c'
   ),
 };
