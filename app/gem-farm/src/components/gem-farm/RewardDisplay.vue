@@ -13,14 +13,14 @@
       <div class="mb-2">
         Reward rate:
         {{
-          numeral(reward.variableRate.rewardRate.n / 10 ** 15).format('0,0.0')
+          numeral(reward?.variableRate?.rewardRate.n / 10 ** 15)?.format('0,0.0')
         }}
         tokens/s
       </div>
       <div class="mb-2">
         Accrued reward/gem:
         {{
-          numeral(reward.variableRate.accruedRewardPerGem.n / 10 ** 15).format(
+          numeral(reward?.variableRate?.accruedRewardPerGem?.n / 10 ** 15)?.format(
             '0,0.0'
           )
         }}
@@ -33,24 +33,24 @@
     </div>
     <div v-else>
       <div class="mb-2">
-        Reserved amount: {{ reward.fixedRate.reservedAmount }}
+        Reserved amount: {{ reward?.fixedRate?.reservedAmount }}
         <FixedScheduleDisplay :schedule="reward.fixedRate.schedule" />
       </div>
     </div>
 
     <!--funds-->
     <div class="mb-2 w-full bg-black text-white">Funds:</div>
-    <div class="mb-2">Funded: {{ reward.funds.totalFunded }}</div>
-    <div class="mb-2">Refunded: {{ reward.funds.totalRefunded }}</div>
-    <div class="mb-2">Accrued: {{ reward.funds.totalAccruedToStakers }}</div>
+    <div class="mb-2">Funded: {{ reward?.funds?.totalFunded }}</div>
+    <div class="mb-2">Refunded: {{ reward?.funds?.totalRefunded }}</div>
+    <div class="mb-2">Accrued: {{ reward?.funds?.totalAccruedToStakers }}</div>
 
     <!--times-->
     <div class="mb-2 w-full bg-black text-white">Times:</div>
-    <div class="mb-2">Duration: {{ reward.times.durationSec }} sec</div>
+    <div class="mb-2">Duration: {{ reward?.times?.durationSec }} sec</div>
     <div class="mb-2">
-      Reward end: {{ parseDate(reward.times.rewardEndTs) }}
+      Reward end: {{ parseDate(reward?.times?.rewardEndTs) }}
     </div>
-    <div class="mb-2">Lock end: {{ parseDate(reward.times.lockEndTs) }}</div>
+    <div class="mb-2">Lock end: {{ parseDate(reward?.times?.lockEndTs) }}</div>
   </div>
 </template>
 

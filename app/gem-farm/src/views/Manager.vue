@@ -117,6 +117,8 @@ export default defineComponent({
     const currentFarmIndex = ref<number>(0);
     const isLoading = ref<boolean>(true);
 
+    console.log('xxxxx foundFarms', foundFarms)
+
     //whenever we change the farm, we update the index/account
     watch(farm, (newFarm: any) => {
       updateFarmByPk(newFarm);

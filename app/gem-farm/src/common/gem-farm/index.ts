@@ -117,7 +117,7 @@ export class GemFarm extends GemFarmClient {
       durationSec: new BN(duration),
     };
 
-    const result = this.fundReward(
+    const result = await this.fundReward(
       farm,
       rewardMint,
       this.wallet.publicKey,
