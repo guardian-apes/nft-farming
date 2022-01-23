@@ -248,6 +248,18 @@ export class GemFarmTester extends GemFarmClient {
     return this.stake(this.farm.publicKey, identity);
   }
 
+  async callInstantWithdraw(identity: Keypair) {
+    const isFarmer1 =
+      identity.publicKey.toBase58() ===
+        this.farmer1Identity.publicKey.toBase58();
+
+    return this.instantWithdraw(
+      this.farm.publicKey,
+      identity,
+      isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
+    )
+  }
+
   async callUnstake(identity: Keypair) {
     return this.unstake(this.farm.publicKey, identity);
   }

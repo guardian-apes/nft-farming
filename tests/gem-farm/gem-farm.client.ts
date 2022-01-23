@@ -387,6 +387,27 @@ export class GemFarmClient extends GemBankClient {
       }
     );
 
+    console.log({
+      farmAuthBump,
+      whitelistProofBump,
+      whitelistType,
+      config: {
+        accounts: {
+          farm: farm.toBase58(),
+          farmManager: (isKp(farmManager)
+          ? (<Keypair>farmManager).publicKey
+          : farmManager).toString(),
+          farmAuthority: farmAuth.toString(),
+          bank: farmAcc.bank.toBase58(),
+          addressToWhitelist: addressToWhitelist.toBase58(),
+          whitelistProof: whitelistProof.toBase58(),
+          systemProgram: SystemProgram.programId.toBase58(),
+          gemBank: this.bankProgram.programId.toBase58(),
+        },
+        signers,
+      }
+    })
+
     return {
       farmAuth,
       farmAuthBump,
@@ -487,6 +508,78 @@ export class GemFarmClient extends GemBankClient {
       vaultAuthBump,
       txSig,
     };
+  }
+
+  async instantWithdraw(
+    farm: PublicKey,
+    farmerIdentity: PublicKey | Keypair,
+    gemMint: PublicKey,
+  ) {
+    const identityPk = isKp(farmerIdentity)
+    ? (<Keypair>farmerIdentity).publicKey
+    : <PublicKey>farmerIdentity;
+
+    const farmAcc = await this.fetchFarmAcc(farm);
+
+    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
+    const [vault, vaultBump] = await this.findVaultPDA(
+      farmAcc.bank,
+      identityPk
+    );
+    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
+    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault, gemMint);
+    const [GDR, GDRBump] = await this.findGdrPDA(vault, gemMint);
+    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault);
+    const [gemRarity, gemRarityBump] = await this.findRarityPDA(
+      farmAcc.bank,
+      gemMint
+    );
+    const gemDestination = await this.findATA(gemMint, identityPk);
+
+    const signers = [];
+    if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
+
+    console.log('instant withdrawing on behalf of', identityPk.toBase58());
+    const txSig = await (this.farmProgram.rpc.instantWithdraw as any)(
+      farmerBump,
+      vaultAuthBump,
+      gemBoxBump,
+      GDRBump,
+      gemRarityBump,
+      new BN(1),// withdrawing one gem
+      {
+        accounts: {
+          farm,
+          farmAuthority: farmAuth,
+          farmer,
+          identity: identityPk,
+          bank: farmAcc.bank,
+          vault,
+          vaultAuthority: vaultAuth,
+          gemBox,
+          gemDepositReceipt: GDR,
+          gemDestination,
+          // gemSource,
+          gemMint,
+          gemRarity,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          gemBank: this.bankProgram.programId,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID
+        },
+        signers,
+      }
+    );
+
+    return {
+      txSig,
+      vault,
+      farmer,
+      farm,
+      farmAcc,
+      GDR
+    }
   }
 
   async stakeCommon(

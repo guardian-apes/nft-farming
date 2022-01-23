@@ -103,6 +103,25 @@ pub mod gem_farm {
         instructions::claim::handler(ctx)
     }
 
+    pub fn instant_withdraw(
+        ctx: Context<InstantWithdraw>,
+        _bump_farmer: u8,
+        bump_auth: u8,
+        bump_gem_box: u8,
+        bump_gdr: u8,
+        bump_rarity: u8,
+        amount: u64,
+    ) -> ProgramResult {
+        instructions::instant_withdraw::handler(
+            ctx,
+            bump_auth,
+            bump_gem_box,
+            bump_gdr,
+            bump_rarity,
+            amount
+        )
+    }
+
     pub fn flash_deposit<'a, 'b, 'c, 'info>(
         ctx: Context<'a, 'b, 'c, 'info, FlashDeposit<'info>>,
         _bump_farmer: u8,

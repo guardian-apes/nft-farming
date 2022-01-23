@@ -231,6 +231,67 @@ impl Farm {
         }
     }
 
+    pub fn unstake_gem(
+        &mut self,
+        now_ts: u64,
+        gems_in_vault: u64,
+        rarity_points_in_vault: u64,
+        withdrawn_gems: u64,
+        withdrawn_rarity_points: u64,
+        farmer: &mut Account<Farmer>,
+    ) -> ProgramResult {
+        // Reset farmer account
+        let (_previous_gems, previous_rarity_points) = farmer.begin_staking(
+            self.config.min_staking_period_sec,
+            now_ts,
+            gems_in_vault,
+            rarity_points_in_vault,
+        )?;
+
+        // update farm
+        self.gems_staked.try_sub_assign(withdrawn_gems)?;
+        self.rarity_points_staked.try_sub_assign(withdrawn_rarity_points)?;
+
+        // fixed-rate only
+        if self.reward_a.reward_type == RewardType::Fixed {
+            // graduate with PREVIOUS rarity points count
+            let original_begin_staking_ts = self
+                .reward_a
+                .fixed_rate
+                .graduate_farmer(previous_rarity_points, &mut farmer.reward_a)?;
+            
+            // re-enroll with NEW rarity points count
+            self.reward_a.fixed_rate.enroll_farmer(
+                now_ts,
+                &mut self.reward_a.times,
+                &mut self.reward_a.funds,
+                farmer.rarity_points_staked,
+                &mut farmer.reward_a,
+                Some(original_begin_staking_ts),
+            )?;
+        }
+
+        if self.reward_b.reward_type == RewardType::Fixed {
+            // graduate with PREVIOUS rarity points count
+            let original_begin_staking_ts = self
+                .reward_b
+                .fixed_rate
+                .graduate_farmer(previous_rarity_points, &mut farmer.reward_b)?;
+
+            // re-enroll with NEW rarity points count
+            self.reward_b.fixed_rate.enroll_farmer(
+                now_ts,
+                &mut self.reward_b.times,
+                &mut self.reward_b.funds,
+                farmer.rarity_points_staked,
+                &mut farmer.reward_b,
+                Some(original_begin_staking_ts),
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn stake_extra_gems(
         &mut self,
         now_ts: u64,

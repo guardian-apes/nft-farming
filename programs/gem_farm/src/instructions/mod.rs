@@ -16,6 +16,7 @@ pub mod stake;
 pub mod treasury_payout;
 pub mod unstake;
 pub mod update_farm;
+pub mod instant_withdraw;
 
 pub use add_rarities_to_bank::*;
 pub use add_to_bank_whitelist::*;
@@ -24,6 +25,7 @@ pub use cancel_reward::*;
 pub use claim::*;
 pub use deauthorize_funder::*;
 pub use flash_deposit::*;
+pub use instant_withdraw::*;
 pub use fund_reward::*;
 pub use init_farm::*;
 pub use init_farmer::*;

@@ -97,4 +97,33 @@ describe('staking (variable rate)', () => {
     assert(farmer1ClaimedNew.eq(farmer1ClaimedOld));
     assert(farmer2ClaimedNew.eq(farmer2ClaimedOld));
   });
+
+  it('instant withdraws a gem', async () => {
+    await gf.stakeAndVerify(gf.farmer1Identity);
+    await gf.stakeAndVerify(gf.farmer2Identity);
+
+    const farmAcc = await gf.fetchFarmAcc(gf.farm.publicKey)
+
+    // await pause(5000); //pause for 5s = accrue 5% of funding
+    const [farmer] = await gf.findFarmerPDA(gf.farm.publicKey, gf.farmer1Identity.publicKey);
+    const [vault] = await gf.findVaultPDA(farmAcc.bank, gf.farmer1Identity.publicKey)
+    const vaultAcc = await gf.fetchVaultAcc(vault)
+    const farmerAcc = await gf.fetchFarmerAcc(farmer)
+
+    await gf.callInstantWithdraw(gf.farmer1Identity)
+
+    // after instant withdraw, vault gem count is updated
+    const vaultAccUpdated = await gf.fetchVaultAcc(vault)
+    const farmerAccUpdated = await gf.fetchFarmerAcc(farmer)
+    const farmAccUpdated = await gf.fetchFarmAcc(gf.farm.publicKey)
+  
+    assert.equal(vaultAcc.gemCount.sub(new BN(1)).toString(), vaultAccUpdated.gemCount.toString())
+    assert.equal(vaultAccUpdated.locked, true)
+
+    assert.equal(farmerAcc.gemsStaked.sub(new BN(1)).toString(), farmerAccUpdated.gemsStaked.toString())
+    
+    assert.equal(farmAcc.gemsStaked.sub(new BN(1)).toString(), farmAccUpdated.gemsStaked.toString())
+
+    assert.equal(farmAcc.rarityPointsStaked.sub(new BN(gf.gem1PerGemRarity)).toString(), farmAccUpdated.rarityPointsStaked.toString())
+  });
 });
