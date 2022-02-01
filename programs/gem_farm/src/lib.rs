@@ -122,6 +122,25 @@ pub mod gem_farm {
         )
     }
 
+    pub fn deposit_gem(
+        ctx: Context<DepositGem>,
+        _bump_auth: u8,
+        _bump_gem_box: u8,
+        _bump_gdr: u8,
+        amount: u64,
+    ) -> ProgramResult {
+        instructions::deposit_gem::handler(ctx, amount)
+    }
+
+    pub fn init_vault(
+        ctx: Context<InitVault>,
+        _bump: u8,
+        owner: Pubkey,
+        name: String,
+    ) -> ProgramResult {
+        instructions::init_vault::handler(ctx, owner, name)
+    }
+
     pub fn flash_deposit<'a, 'b, 'c, 'info>(
         ctx: Context<'a, 'b, 'c, 'info, FlashDeposit<'info>>,
         _bump_farmer: u8,

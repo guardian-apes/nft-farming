@@ -115,14 +115,14 @@ export class GemFarmTester extends GemFarmClient {
       100 * LAMPORTS_PER_SOL
     );
     [this.farmer1Vault] = await this.findVaultPDA(
-      this.bank.publicKey,
+      this.farm.publicKey,
       this.farmer1Identity.publicKey
     );
     this.farmer2Identity = await this.nw.createFundedWallet(
       100 * LAMPORTS_PER_SOL
     );
     [this.farmer2Vault] = await this.findVaultPDA(
-      this.bank.publicKey,
+      this.farm.publicKey,
       this.farmer2Identity.publicKey
     );
 
@@ -191,7 +191,6 @@ export class GemFarmTester extends GemFarmClient {
       this.farm,
       this.farmManager,
       this.farmManager,
-      this.bank,
       isRewardA ? this.rewardMint.publicKey : this.rewardSecondMint.publicKey,
       rewardType ?? RewardType.Variable,
       isRewardA ? this.rewardSecondMint.publicKey : this.rewardMint.publicKey,
@@ -244,6 +243,10 @@ export class GemFarmTester extends GemFarmClient {
     return this.initFarmer(this.farm.publicKey, identity, identity);
   }
 
+  async callInitVault(identity: Keypair) {
+    return this.initVault(this.farm.publicKey, identity, identity, identity.publicKey, 'test_vault');
+  }
+
   async callStake(identity: Keypair) {
     return this.stake(this.farm.publicKey, identity);
   }
@@ -270,7 +273,7 @@ export class GemFarmTester extends GemFarmClient {
       this.farmer1Identity.publicKey.toBase58();
 
     return this.depositGem(
-      this.bank.publicKey,
+      this.farm.publicKey,
       isFarmer1 ? this.farmer1Vault : this.farmer2Vault,
       identity,
       toBN(gems),

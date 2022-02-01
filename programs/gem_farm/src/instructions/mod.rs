@@ -17,6 +17,8 @@ pub mod treasury_payout;
 pub mod unstake;
 pub mod update_farm;
 pub mod instant_withdraw;
+pub mod deposit_gem;
+pub mod init_vault;
 
 pub use add_rarities_to_bank::*;
 pub use add_to_bank_whitelist::*;
@@ -37,6 +39,8 @@ pub use stake::*;
 pub use treasury_payout::*;
 pub use unstake::*;
 pub use update_farm::*;
+pub use deposit_gem::*;
+pub use init_vault::*;
 
 // have to duplicate or this won't show up in IDL
 use anchor_lang::prelude::*;

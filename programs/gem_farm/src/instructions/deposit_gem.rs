@@ -8,26 +8,16 @@ use metaplex_token_metadata::state::Metadata;
 use crate::state::*;
 
 #[derive(Accounts)]
-#[instruction(bump_auth: u8, bump_gem_box: u8, bump_gdr: u8, bump_rarity: u8)]
+#[instruction(bump_auth: u8, bump_gem_box: u8, bump_gdr: u8)]
 pub struct DepositGem<'info> {
-    // bank
-    pub bank: Box<Account<'info, Bank>>,
+    // farm
+    pub farm: Box<Account<'info, Farm>>,
 
     // vault
     // skipped vault PDA verification because requires passing in creator, which is tedious
     // sec wise secure enough: vault has owner -> owner is signer
-    #[account(mut, has_one = bank, has_one = owner, has_one = authority)]
+    #[account(mut, has_one = farm, has_one = owner, has_one = authority)]
     pub vault: Box<Account<'info, Vault>>,
-
-    // #[account(init, seeds = [
-    //     b"vault".as_ref(),
-    //     bank.key().as_ref(),
-    //     creator.key().as_ref(),
-    // ],
-    // bump = bump,
-    // payer = payer,
-    // space = 8 + std::mem::size_of::<Vault>())]
-    // pub vault: Box<Account<'info, Vault>>,
     // currently only the vault owner can deposit
     // add a "depositor" account, and remove Signer from vault owner to let anyone to deposit
     #[account(mut)]
@@ -58,13 +48,6 @@ pub struct DepositGem<'info> {
     #[account(mut)]
     pub gem_source: Box<Account<'info, TokenAccount>>,
     pub gem_mint: Box<Account<'info, Mint>>,
-    // we MUST ask for this PDA both during deposit and withdrawal for sec reasons, even if it's zero'ed
-    #[account(seeds = [
-            b"gem_rarity".as_ref(),
-            bank.key().as_ref(),
-            gem_mint.key().as_ref()
-        ], bump = bump_rarity)]
-    pub gem_rarity: AccountInfo<'info>,
 
     // misc
     pub token_program: Program<'info, Token>,
@@ -114,7 +97,7 @@ fn assert_valid_metadata(
 
 fn assert_valid_whitelist_proof<'info>(
     whitelist_proof: &AccountInfo<'info>,
-    bank: &Pubkey,
+    farm: &Pubkey,
     address_to_whitelist: &Pubkey,
     program_id: &Pubkey,
     expected_whitelist_type: WhitelistType,
@@ -122,7 +105,7 @@ fn assert_valid_whitelist_proof<'info>(
     // 1 verify the PDA seeds match
     let seed = &[
         b"whitelist".as_ref(),
-        bank.as_ref(),
+        farm.as_ref(),
         address_to_whitelist.as_ref(),
     ];
     let (whitelist_addr, _bump) = Pubkey::find_program_address(seed, program_id);
@@ -141,30 +124,12 @@ fn assert_valid_whitelist_proof<'info>(
 }
 
 fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
-    let bank = &*ctx.accounts.bank;
+    let farm = &*ctx.accounts.farm;
     let mint = &*ctx.accounts.gem_mint;
     let remaining_accs = &mut ctx.remaining_accounts.iter();
 
-    // whitelisted mint is always the 1st optional account
-    // this is because it's applicable to both NFTs and standard fungible tokens
-    let mint_whitelist_proof_info = next_account_info(remaining_accs)?;
-
-    // attempt to verify based on mint
-    if bank.whitelisted_mints > 0 {
-        if let Ok(()) = assert_valid_whitelist_proof(
-            mint_whitelist_proof_info,
-            &bank.key(),
-            &mint.key(),
-            ctx.program_id,
-            WhitelistType::MINT,
-        ) {
-            // msg!("mint whitelisted: {}, going ahead", &mint.key());
-            return Ok(());
-        }
-    }
-
     // if mint verification above failed, attempt to verify based on creator
-    if bank.whitelisted_creators > 0 {
+    if farm.whitelisted_creators > 0 {
         // 2 additional accounts are expected - metadata and creator whitelist proof
         let metadata_info = next_account_info(remaining_accs)?;
         let creator_whitelist_proof_info = next_account_info(remaining_accs)?;
@@ -183,7 +148,7 @@ fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
             // check if creator is whitelisted, returns an error if not
             let attempted_proof = assert_valid_whitelist_proof(
                 creator_whitelist_proof_info,
-                &bank.key(),
+                &farm.key(),
                 &creator.address,
                 ctx.program_id,
                 WhitelistType::CREATOR,
@@ -202,30 +167,17 @@ fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
     Err(ErrorCode::NotWhitelisted.into())
 }
 
-/// if rarity account is present, extract rarities from there - else use 1 * amount
-pub fn calc_rarity_points(gem_rarity: &AccountInfo, amount: u64) -> Result<u64, ProgramError> {
-    if !gem_rarity.data_is_empty() {
-        let rarity_account = Account::<Rarity>::try_from(gem_rarity)?;
-        amount.try_mul(rarity_account.points as u64)
-    } else {
-        Ok(amount)
-    }
-}
-
 pub fn handler(ctx: Context<DepositGem>, amount: u64) -> ProgramResult {
     // if even a single whitelist exists, verify the token against it
-    let bank = &*ctx.accounts.bank;
+    let farm = &*ctx.accounts.farm;
+    let vault = &*ctx.accounts.vault;
 
-    if bank.whitelisted_mints > 0 || bank.whitelisted_creators > 0 {
-        assert_whitelisted(&ctx)?;
+    if vault.access_suspended()? {
+        return Err(ErrorCode::VaultAccessSuspended.into());
     }
 
-    // verify vault not suspended
-    let bank = &*ctx.accounts.bank;
-    let vault = &ctx.accounts.vault;
-
-    if vault.access_suspended(bank.flags)? {
-        return Err(ErrorCode::VaultAccessSuspended.into());
+    if farm.whitelisted_creators > 0 {
+        assert_whitelisted(&ctx)?;
     }
 
     // do the transfer
@@ -236,28 +188,24 @@ pub fn handler(ctx: Context<DepositGem>, amount: u64) -> ProgramResult {
         amount,
     )?;
 
-    // record total number of gem boxes in vault's state
+    let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
-    vault.gem_box_count.try_add_assign(1)?;
-    vault.gem_count.try_add_assign(amount)?;
-    vault
-        .rarity_points
-        .try_add_assign(calc_rarity_points(&ctx.accounts.gem_rarity, amount)?)?;
+    let gem_box = &*ctx.accounts.gem_box;
+
+    // record number of vaults on farm
+    farm.vault_count.try_add_assign(1)?;
+
+    // record the gem on vault and lock the vault
+    vault.locked = true;
+    vault.gem_mint = gem_box.mint;
 
     // record a gdr
     let gdr = &mut *ctx.accounts.gem_deposit_receipt;
-    let gem_box = &*ctx.accounts.gem_box;
-
+    
     gdr.vault = vault.key();
     gdr.gem_box_address = gem_box.key();
     gdr.gem_mint = gem_box.mint;
     gdr.gem_count.try_add_assign(amount)?;
-
-    // this check is semi-useless but won't hurt
-    if gdr.gem_count != gem_box.amount + amount {
-        // msg!("{} {}", gdr.gem_count, gem_box.amount);
-        return Err(ErrorCode::AmountMismatch.into());
-    }
 
     // msg!("{} gems deposited into {} gem box", amount, gem_box.key());
     Ok(())

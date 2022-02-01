@@ -10,7 +10,7 @@
         {{
           numeral(
             reward?.variableRate?.lastRecordedAccruedRewardPerGem?.n / 10 ** 15
-          )?.format('0,0.0')
+          )?.format("0,0.0")
         }}
       </div>
     </div>
@@ -25,9 +25,7 @@
       <div class="mb-2">
         Last updated: {{ parseDate(reward.fixedRate.lastUpdatedTs) }}
       </div>
-      <div class="mb-2">
-        Promised duration: {{ reward.fixedRate.promisedDuration }}
-      </div>
+      <div class="mb-2">Promised duration: {{ reward.fixedRate.promisedDuration }}</div>
       <div class="mb-2">Promised schedule:</div>
       <FixedScheduleDisplay
         :key="farmReward"
@@ -39,10 +37,10 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
-import FixedScheduleDisplay from '@/components/gem-farm/FixedScheduleDisplay.vue';
-import { parseDate } from '@/common/util';
-import numeral from 'numeral';
+import { defineComponent } from "vue";
+import FixedScheduleDisplay from "@/components/gem-farm/FixedScheduleDisplay.vue";
+import { parseDate } from "@/common/util";
+import numeral from "numeral";
 
 export default defineComponent({
   components: { FixedScheduleDisplay },

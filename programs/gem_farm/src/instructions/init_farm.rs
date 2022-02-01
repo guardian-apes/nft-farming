@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
-use gem_bank::{self, cpi::accounts::InitBank, program::GemBank};
 
 use crate::state::*;
 
@@ -42,34 +41,12 @@ pub struct InitFarm<'info> {
     pub reward_b_pot: Box<Account<'info, TokenAccount>>,
     pub reward_b_mint: Box<Account<'info, Mint>>,
 
-    // cpi
-    #[account(mut)]
-    pub bank: Signer<'info>,
-    pub gem_bank: Program<'info, GemBank>,
-
     // misc
     #[account(mut)]
     pub payer: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-}
-
-impl<'info> InitFarm<'info> {
-    fn init_bank_ctx(&self) -> CpiContext<'_, '_, '_, 'info, InitBank<'info>> {
-        CpiContext::new(
-            self.gem_bank.to_account_info(),
-            InitBank {
-                bank: self.bank.to_account_info(),
-                // using farm_authority, NOT farm_manager, coz on certain ixs (eg lock/unclock)
-                // we need manager's sig, but we don't have farm manager's KP.
-                // unfortunately this means we have to write a CPI ix for farm for each ix for bank
-                bank_manager: self.farm_authority.clone(),
-                payer: self.payer.to_account_info(),
-                system_program: self.system_program.to_account_info(),
-            },
-        )
-    }
 }
 
 pub fn handler(
@@ -88,7 +65,6 @@ pub fn handler(
     farm.farm_authority = ctx.accounts.farm_authority.key();
     farm.farm_authority_seed = farm.key();
     farm.farm_authority_bump_seed = [bump_auth];
-    farm.bank = ctx.accounts.bank.key();
     farm.config = farm_config;
 
     farm.reward_a.reward_mint = ctx.accounts.reward_a_mint.key();
@@ -100,13 +76,6 @@ pub fn handler(
     farm.reward_b.reward_pot = ctx.accounts.reward_b_pot.key();
     farm.reward_b.reward_type = reward_type_b;
     farm.reward_b.fixed_rate.schedule = FixedRateSchedule::default(); //denom to 1
-
-    //do a cpi call to start a new bank
-    gem_bank::cpi::init_bank(
-        ctx.accounts
-            .init_bank_ctx()
-            .with_signer(&[&ctx.accounts.farm.farm_seeds()]),
-    )?;
 
     msg!("new farm initialized");
     Ok(())

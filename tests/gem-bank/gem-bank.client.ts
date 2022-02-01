@@ -66,10 +66,6 @@ export class GemBankClient extends AccountUtils {
     return this.bankProgram.account.bank.fetch(bank);
   }
 
-  async fetchVaultAcc(vault: PublicKey) {
-    return this.bankProgram.account.vault.fetch(vault);
-  }
-
   async fetchGDRAcc(GDR: PublicKey) {
     return this.bankProgram.account.gemDepositReceipt.fetch(GDR);
   }
@@ -87,34 +83,6 @@ export class GemBankClient extends AccountUtils {
   }
 
   // --------------------------------------- find PDA addresses
-
-  async findVaultPDA(bank: PublicKey, creator: PublicKey) {
-    return this.findProgramAddress(this.bankProgram.programId, [
-      'vault',
-      bank,
-      creator,
-    ]);
-  }
-
-  async findGemBoxPDA(vault: PublicKey, mint: PublicKey) {
-    return this.findProgramAddress(this.bankProgram.programId, [
-      'gem_box',
-      vault,
-      mint,
-    ]);
-  }
-
-  async findGdrPDA(vault: PublicKey, mint: PublicKey) {
-    return this.findProgramAddress(this.bankProgram.programId, [
-      'gem_deposit_receipt',
-      vault,
-      mint,
-    ]);
-  }
-
-  async findVaultAuthorityPDA(vault: PublicKey) {
-    return this.findProgramAddress(this.bankProgram.programId, [vault]);
-  }
 
   async findWhitelistProofPDA(bank: PublicKey, whitelistedAddress: PublicKey) {
     return this.findProgramAddress(this.bankProgram.programId, [
@@ -164,22 +132,6 @@ export class GemBankClient extends AccountUtils {
       : [];
     const pdas = await this.bankProgram.account.vault.all(filter);
     console.log(`found a total of ${pdas.length} vault PDAs`);
-    return pdas;
-  }
-
-  async fetchAllGdrPDAs(vault?: PublicKey) {
-    const filter = vault
-      ? [
-          {
-            memcmp: {
-              offset: 8, //need to prepend 8 bytes for anchor's disc
-              bytes: vault.toBase58(),
-            },
-          },
-        ]
-      : [];
-    const pdas = await this.bankProgram.account.gemDepositReceipt.all(filter);
-    console.log(`found a total of ${pdas.length} GDR PDAs`);
     return pdas;
   }
 
@@ -254,39 +206,6 @@ export class GemBankClient extends AccountUtils {
     return { txSig };
   }
 
-  async initVault(
-    bank: PublicKey,
-    creator: PublicKey | Keypair,
-    payer: PublicKey | Keypair,
-    owner: PublicKey,
-    name: string
-  ) {
-    const creatorPk = isKp(creator)
-      ? (<Keypair>creator).publicKey
-      : <PublicKey>creator;
-
-    const [vault, vaultBump] = await this.findVaultPDA(bank, creatorPk);
-    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault); //nice-to-have
-
-    const signers = [];
-    if (isKp(creator)) signers.push(<Keypair>creator);
-    if (isKp(payer)) signers.push(<Keypair>payer);
-
-    console.log('creating vault at', vault.toBase58());
-    const txSig = await this.bankProgram.rpc.initVault(vaultBump, owner, name, {
-      accounts: {
-        bank,
-        vault,
-        creator: creatorPk,
-        payer: isKp(payer) ? (<Keypair>payer).publicKey : <PublicKey>payer,
-        systemProgram: SystemProgram.programId,
-      },
-      signers,
-    });
-
-    return { vault, vaultBump, vaultAuth, vaultAuthBump, txSig };
-  }
-
   async updateVaultOwner(
     bank: PublicKey,
     vault: PublicKey,
@@ -355,89 +274,6 @@ export class GemBankClient extends AccountUtils {
     });
 
     return { txSig };
-  }
-
-  async depositGem(
-    bank: PublicKey,
-    vault: PublicKey,
-    vaultOwner: PublicKey | Keypair,
-    gemAmount: BN,
-    gemMint: PublicKey,
-    gemSource: PublicKey,
-    mintProof?: PublicKey,
-    metadata?: PublicKey,
-    creatorProof?: PublicKey
-  ) {
-    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault, gemMint);
-    const [GDR, GDRBump] = await this.findGdrPDA(vault, gemMint);
-    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault);
-    const [gemRarity, gemRarityBump] = await this.findRarityPDA(bank, gemMint);
-
-    const remainingAccounts = [];
-    if (mintProof)
-      remainingAccounts.push({
-        pubkey: mintProof,
-        isWritable: false,
-        isSigner: false,
-      });
-    if (metadata)
-      remainingAccounts.push({
-        pubkey: metadata,
-        isWritable: false,
-        isSigner: false,
-      });
-    if (creatorProof)
-      remainingAccounts.push({
-        pubkey: creatorProof,
-        isWritable: false,
-        isSigner: false,
-      });
-
-    const signers = [];
-    if (isKp(vaultOwner)) signers.push(<Keypair>vaultOwner);
-
-    console.log(
-      `depositing ${gemAmount} gems into ${gemBox.toBase58()}, GDR ${GDR.toBase58()}`
-    );
-    const txSig = await this.bankProgram.rpc.depositGem(
-      vaultAuthBump,
-      gemBoxBump,
-      GDRBump,
-      gemRarityBump,
-      gemAmount,
-      {
-        accounts: {
-          bank,
-          vault,
-          owner: isKp(vaultOwner)
-            ? (<Keypair>vaultOwner).publicKey
-            : vaultOwner,
-          authority: vaultAuth,
-          gemBox,
-          gemDepositReceipt: GDR,
-          gemSource,
-          gemMint,
-          gemRarity,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        },
-        remainingAccounts,
-        signers,
-      }
-    );
-
-    return {
-      vaultAuth,
-      vaultAuthBump,
-      gemBox,
-      gemBoxBump,
-      GDR,
-      GDRBump,
-      gemRarity,
-      gemRarityBump,
-      txSig,
-    };
   }
 
   async withdrawGem(

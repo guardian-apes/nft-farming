@@ -214,7 +214,6 @@ export class GemFarmClient extends GemBankClient {
     farm: Keypair,
     farmManager: PublicKey | Keypair,
     payer: PublicKey | Keypair,
-    bank: Keypair,
     rewardAMint: PublicKey,
     rewardAType: any, //RewardType instance
     rewardBMint: PublicKey,
@@ -236,10 +235,10 @@ export class GemFarmClient extends GemBankClient {
       rewardBMint
     );
 
-    const signers = [farm, bank];
+    const signers = [farm];
     if (isKp(farmManager)) signers.push(<Keypair>farmManager);
 
-    console.log('starting farm at', bank.publicKey.toBase58());
+    console.log('starting farm at', farm.publicKey.toBase58());
     const txSig = await this.farmProgram.rpc.initFarm(
       farmAuthBump,
       farmTreasuryBump,
@@ -261,8 +260,6 @@ export class GemFarmClient extends GemBankClient {
           rewardAMint,
           rewardBPot,
           rewardBMint,
-          bank: bank.publicKey,
-          gemBank: this.bankProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -461,6 +458,39 @@ export class GemFarmClient extends GemBankClient {
   }
 
   // --------------------------------------- farmer ops ixs
+
+  async initVault(
+    farm: PublicKey,
+    creator: PublicKey | Keypair,
+    payer: PublicKey | Keypair,
+    owner: PublicKey,
+    name: string
+  ) {
+    const creatorPk = isKp(creator)
+      ? (<Keypair>creator).publicKey
+      : <PublicKey>creator;
+
+    const [vault, vaultBump] = await this.findVaultPDA(farm, creatorPk);
+    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault); //nice-to-have
+
+    const signers = [];
+    if (isKp(creator)) signers.push(<Keypair>creator);
+    if (isKp(payer)) signers.push(<Keypair>payer);
+
+    console.log('creating vault at', vault.toBase58(), ' for farm ', farm.toBase58());
+    const txSig = await this.farmProgram.rpc.initVault(vaultBump, owner, name, {
+      accounts: {
+        farm,
+        vault,
+        creator: creatorPk,
+        payer: isKp(payer) ? (<Keypair>payer).publicKey : <PublicKey>payer,
+        systemProgram: SystemProgram.programId,
+      },
+      signers,
+    });
+
+    return { vault, vaultBump, vaultAuth, vaultAuthBump, txSig };
+  }
 
   async initFarmer(
     farm: PublicKey,
@@ -831,6 +861,126 @@ export class GemFarmClient extends GemBankClient {
     };
   }
 
+  async depositGem(
+    farm: PublicKey,
+    vault: PublicKey,
+    vaultOwner: PublicKey | Keypair,
+    gemAmount: BN,
+    gemMint: PublicKey,
+    gemSource: PublicKey,
+    mintProof?: PublicKey,
+    metadata?: PublicKey,
+    creatorProof?: PublicKey
+  ) {
+    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault, gemMint);
+    const [GDR, GDRBump] = await this.findGdrPDA(vault, gemMint);
+    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault);
+
+    const remainingAccounts = [];
+    if (mintProof)
+      remainingAccounts.push({
+        pubkey: mintProof,
+        isWritable: false,
+        isSigner: false,
+      });
+    if (metadata)
+      remainingAccounts.push({
+        pubkey: metadata,
+        isWritable: false,
+        isSigner: false,
+      });
+    if (creatorProof)
+      remainingAccounts.push({
+        pubkey: creatorProof,
+        isWritable: false,
+        isSigner: false,
+      });
+
+    const signers = [];
+    if (isKp(vaultOwner)) signers.push(<Keypair>vaultOwner);
+
+    console.log(
+      `depositing ${gemAmount} gems into ${gemBox.toBase58()}, GDR ${GDR.toBase58()}, vault: ${vault.toBase58()}, farm: ${farm.toBase58()}`
+    );
+    const txSig = await this.farmProgram.rpc.depositGem(
+      vaultAuthBump,
+      gemBoxBump,
+      GDRBump,
+      gemAmount,
+      {
+        accounts: {
+          vault,
+          farm,
+          owner: isKp(vaultOwner)
+            ? (<Keypair>vaultOwner).publicKey
+            : vaultOwner,
+          authority: vaultAuth,
+          gemBox,
+          gemDepositReceipt: GDR,
+          gemSource,
+          gemMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        remainingAccounts,
+        signers,
+      }
+    );
+
+    return {
+      vaultAuth,
+      vaultAuthBump,
+      gemBox,
+      vault,
+      farm,
+      gemBoxBump,
+      GDR,
+      GDRBump,
+      txSig,
+    };
+  }
+
+  async fetchVaultAcc(vault: PublicKey) {
+    return this.farmProgram.account.vault.fetch(vault);
+  }
+
+  async fetchAllGdrPDAs(vault?: PublicKey) {
+    const filter = vault
+      ? [
+          {
+            memcmp: {
+              offset: 8, //need to prepend 8 bytes for anchor's disc
+              bytes: vault.toBase58(),
+            },
+          },
+        ]
+      : [];
+    const pdas = await this.farmProgram.account.gemDepositReceipt.all(filter);
+    console.log(`found a total of ${pdas.length} GDR PDAs for vault: ${vault?.toBase58()}`);
+    return pdas;
+  }
+
+  async findVaultAuthorityPDA(vault: PublicKey) {
+    return this.findProgramAddress(this.farmProgram.programId, [vault]);
+  }
+
+  async findGemBoxPDA(vault: PublicKey, mint: PublicKey) {
+    return this.findProgramAddress(this.farmProgram.programId, [
+      'gem_box',
+      vault,
+      mint,
+    ]);
+  }
+
+  async findGdrPDA(vault: PublicKey, mint: PublicKey) {
+    return this.findProgramAddress(this.farmProgram.programId, [
+      'gem_deposit_receipt',
+      vault,
+      mint,
+    ]);
+  }
+
   async refreshFarmer(
     farm: PublicKey,
     farmerIdentity: PublicKey | Keypair,
@@ -1145,5 +1295,13 @@ export class GemFarmClient extends GemBankClient {
   //returns "staked" / "unstaked" / "pendingCooldown"
   parseFarmerState(farmer: any): string {
     return Object.keys(farmer.state)[0];
+  }
+
+  async findVaultPDA(farm: PublicKey, creator: PublicKey) {
+    return this.findProgramAddress(this.farmProgram.programId, [
+      'vault',
+      farm,
+      creator,
+    ]);
   }
 }
