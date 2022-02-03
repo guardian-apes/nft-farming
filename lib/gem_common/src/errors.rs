@@ -35,8 +35,12 @@ pub enum ErrorCode {
 
     #[msg("insufficient funds in farm. please fund the farm rewards.")]
     InsufficientFunding,
-    Reserved8,
-    Reserved9,
+    
+    #[msg("too early to withdraw. vault is locked.")]
+    TooEarlyToWithdraw,
+
+    #[msg("already claimed reserved rewards")]
+    AlreadyClaimedAllReservedRewards,
     Reserved10,
     Reserved11,
     Reserved12,

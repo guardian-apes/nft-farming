@@ -8,10 +8,7 @@ pub const LATEST_FARM_VERSION: u16 = 0;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct FarmConfig {
-    // min time the NFT has to be staked
-    pub min_staking_period_sec: u64,
-
-    pub unstaking_fee_lamp: u64,
+    pub paper_hands_tax_lamp: u64,
 }
 
 #[repr(C)]
@@ -92,6 +89,15 @@ impl Farm {
 
         // record number of vaults on farm
         self.vault_count.try_add_assign(1)?;
+
+        Ok(())
+    }
+
+    pub fn unreserve_rewards(&mut self, vault: &mut Vault, now: u64)-> ProgramResult {
+        // amount we unreserve is total paid out + any outstanding rewards to be paid out
+        let unreserve_amount = vault.reward_a.paid_out_reward.try_add(vault.reward_a.outstanding_reward(now)?)?;
+
+        self.reward_a.funds.total_accrued_to_stakers.try_sub_assign(unreserve_amount)?;
 
         Ok(())
     }

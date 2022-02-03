@@ -7,6 +7,7 @@ pub mod deposit_gem;
 pub mod init_vault;
 pub mod fund_reward;
 pub mod claim_rewards;
+pub mod withdraw_gem;
 
 pub use authorize_funder::*;
 pub use deauthorize_funder::*;
@@ -17,6 +18,7 @@ pub use deposit_gem::*;
 pub use init_vault::*;
 pub use fund_reward::*;
 pub use claim_rewards::*;
+pub use withdraw_gem::*;
 
 // have to duplicate or this won't show up in IDL
 use anchor_lang::prelude::*;

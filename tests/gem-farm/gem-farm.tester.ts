@@ -23,9 +23,7 @@ import { NodeWallet } from '../gem-common/node-wallet';
 export const PRECISION = 10 ** 15;
 
 export const defaultFarmConfig = <FarmConfig>{
-  minStakingPeriodSec: new BN(0),
-  cooldownPeriodSec: new BN(0),
-  unstakingFeeLamp: new BN(LAMPORTS_PER_SOL),
+  paperHandsTaxLamp: new BN(0),
 };
 
 export const defaultVariableConfig = <VariableRateConfig>{
@@ -66,7 +64,9 @@ export class GemFarmTester extends GemFarmClient {
   //farm + bank
   bank!: Keypair;
   farm!: Keypair;
+  farm2!: Keypair;
   farmManager!: Keypair;
+  farmManager2!: Keypair;
 
   //farmer 1 + vault
   farmer1Identity!: Keypair;
@@ -116,7 +116,9 @@ export class GemFarmTester extends GemFarmClient {
 
     this.bank = Keypair.generate();
     this.farm = Keypair.generate();
+    this.farm2 = Keypair.generate();
     this.farmManager = await this.nw.createFundedWallet(100 * LAMPORTS_PER_SOL);
+    this.farmManager2 = await this.nw.createFundedWallet(100 * LAMPORTS_PER_SOL);
 
     this.farmer1Identity = await this.nw.createFundedWallet(
       100 * LAMPORTS_PER_SOL
@@ -175,12 +177,6 @@ export class GemFarmTester extends GemFarmClient {
     return { gemAmount, gemOwner, gem };
   }
 
-  async prepGemRarities() {
-    if (this.gem1PerGemRarity > 1 || this.gem2PerGemRarity > 1) {
-      await this.setGemRarities(this.gem1PerGemRarity, this.gem2PerGemRarity);
-    }
-  }
-
   // --------------------------------------- getters
 
   async fetchFarm() {
@@ -194,16 +190,26 @@ export class GemFarmTester extends GemFarmClient {
   // --------------------------------------- callers
   // ----------------- core
 
-  async callInitFarm(farmConfig: FarmConfig, rewardType?: any) {
-    const isRewardA = this.reward === 'rewardA';
+  async callInitSecondFarm(farmConfig: FarmConfig) {
+    return this.initFarm(
+      this.farm2,
+      this.farmManager2,
+      this.farmManager2,
+      this.rewardMint.publicKey,
+      RewardType.Fixed,
+      defaultFixedConfig.schedule,
+      farmConfig
+    );
+  }
 
+  async callInitFarm(farmConfig: FarmConfig, schedule?: FixedRateSchedule) {
     return this.initFarm(
       this.farm,
       this.farmManager,
       this.farmManager,
       this.rewardMint.publicKey,
       RewardType.Fixed,
-      defaultFixedConfig.schedule,
+      schedule || defaultFixedConfig.schedule,
       farmConfig
     );
   }
@@ -226,82 +232,27 @@ export class GemFarmTester extends GemFarmClient {
     );
   }
 
-  async callAddToBankWhitelist(
-    addressToWhitelist: PublicKey,
-    whitelistType: WhitelistType
-  ) {
-    return this.addToBankWhitelist(
-      this.farm.publicKey,
-      this.farmManager,
-      addressToWhitelist,
-      whitelistType
-    );
-  }
-
-  async callRemoveFromBankWhitelist(addressToRemove: PublicKey) {
-    return this.removeFromBankWhitelist(
-      this.farm.publicKey,
-      this.farmManager,
-      addressToRemove
-    );
-  }
-
   // ----------------- farmer
 
-  async callInitFarmer(identity: Keypair) {
-    return this.initFarmer(this.farm.publicKey, identity, identity);
+  async callInitVault(identity: Keypair, token: PublicKey, farm?: PublicKey) {
+    return this.initVault(farm || this.farm.publicKey, identity, token);
   }
 
-  async callInitVault(identity: Keypair, token: PublicKey) {
-    return this.initVault(this.farm.publicKey, identity, token);
+  async callWithdraw(identity: Keypair, mint: PublicKey, farm?: PublicKey) {
+    return this.withdrawGemFromVault(farm || this.farm.publicKey, identity, mint, this.rewardMint.publicKey)
   }
 
-  async callStake(identity: Keypair) {
-    return this.stake(this.farm.publicKey, identity);
-  }
-
-  async callInstantWithdraw(identity: Keypair) {
-    const isFarmer1 =
-      identity.publicKey.toBase58() ===
-        this.farmer1Identity.publicKey.toBase58();
-
-    return this.instantWithdraw(
-      this.farm.publicKey,
-      identity,
-      isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
-    )
-  }
-
-  async callUnstake(identity: Keypair) {
-    return this.unstake(this.farm.publicKey, identity);
-  }
-
-  async callDeposit(identity: Keypair, tierSchedule: TierConfig|null = null) {
+  async callDeposit(identity: Keypair, tierSchedule: TierConfig|null = null, farm?: PublicKey) {
     const isFarmer1 =
       identity.publicKey.toBase58() ===
       this.farmer1Identity.publicKey.toBase58();
 
     return this.depositGem(
-      this.farm.publicKey,
+      farm || this.farm.publicKey,
       isFarmer1 ? this.farmer1Identity : this.farmer2Identity,
       isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
       isFarmer1 ? this.gem1.tokenAcc : this.gem2.tokenAcc,
       tierSchedule
-    );
-  }
-
-  async callWithdraw(gems: Numerical, identity: Keypair) {
-    const isFarmer1 =
-      identity.publicKey.toBase58() ===
-      this.farmer1Identity.publicKey.toBase58();
-
-    return this.withdrawGem(
-      this.bank.publicKey,
-      isFarmer1 ? this.farmer1Vault : this.farmer2Vault,
-      identity,
-      toBN(gems),
-      isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
-      identity.publicKey
     );
   }
 
@@ -314,39 +265,12 @@ export class GemFarmTester extends GemFarmClient {
     );
   }
 
-  async callFlashDeposit(
-    gems: Numerical,
-    identity: Keypair,
-    mintProof?: PublicKey,
-    metadata?: PublicKey,
-    creatorProof?: PublicKey
-  ) {
-    const isFarmer1 =
-      identity.publicKey.toBase58() ===
-      this.farmer1Identity.publicKey.toBase58();
-
-    return this.flashDeposit(
-      this.farm.publicKey,
-      identity,
-      toBN(gems),
-      isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
-      isFarmer1 ? this.gem1.tokenAcc : this.gem2.tokenAcc,
-      mintProof,
-      metadata,
-      creatorProof
-    );
-  }
-
-  async callRefreshFarmer(identity: Keypair | PublicKey, reenroll?: boolean) {
-    return this.refreshFarmer(this.farm.publicKey, identity, reenroll);
-  }
-
   // ----------------- funder
 
-  async callAuthorize() {
+  async callAuthorize(farm?: PublicKey, manager?: Keypair) {
     return this.authorizeFunder(
-      this.farm.publicKey,
-      this.farmManager,
+      farm || this.farm.publicKey,
+      manager || this.farmManager,
       this.funder.publicKey
     );
   }
@@ -361,58 +285,14 @@ export class GemFarmTester extends GemFarmClient {
 
   // ----------------- rewards
 
-  async callFundReward(amount: BN) {
+  async callFundReward(amount: BN, farm?: PublicKey) {
     return this.fundReward(
-      this.farm.publicKey,
+      farm || this.farm.publicKey,
       this.rewardMint.publicKey,
       this.funder,
       this.rewardSource,
       amount
     );
-  }
-
-  async callCancelReward() {
-    return this.cancelReward(
-      this.farm.publicKey,
-      this.farmManager,
-      this.rewardMint.publicKey,
-      this.funder.publicKey
-    );
-  }
-
-  async callLockReward() {
-    return this.lockReward(
-      this.farm.publicKey,
-      this.farmManager,
-      this.rewardMint.publicKey
-    );
-  }
-
-  // --------------------------------------- rarities
-
-  async callAddRaritiesToBank(rarityConfigs: RarityConfig[]) {
-    return this.addRaritiesToBank(
-      this.farm.publicKey,
-      this.farmManager,
-      rarityConfigs
-    );
-  }
-
-  async setGemRarities(
-    gem1PerGemRarity: number = 1,
-    gem2PerGemRarity: number = 1
-  ) {
-    const configs: RarityConfig[] = [
-      {
-        mint: this.gem1.tokenMint,
-        rarityPoints: gem1PerGemRarity,
-      },
-      {
-        mint: this.gem2.tokenMint,
-        rarityPoints: gem2PerGemRarity,
-      },
-    ];
-    await this.callAddRaritiesToBank(configs);
   }
 
   // --------------------------------------- verifiers
@@ -560,263 +440,6 @@ export class GemFarmTester extends GemFarmClient {
     // );
 
     return { gem1, gem2, total };
-  }
-
-  async verifyStakedGemsAndFarmers(
-    farmers: Numerical,
-    gem1Amount?: Numerical,
-    gem2Amount?: Numerical
-  ) {
-    let farmAcc = await this.fetchFarm();
-    assert(farmAcc.stakedFarmerCount.eq(toBN(farmers)));
-    assert(farmAcc.gemsStaked.eq(this.calcTotalGems(gem1Amount, gem2Amount)));
-    assert(
-      farmAcc.rarityPointsStaked.eq(
-        this.calcTotalGemRarity(gem1Amount, gem2Amount).total
-      )
-    );
-
-    return farmAcc;
-  }
-
-  async verifyFarmerReward(
-    identity: Keypair,
-    paidOutReward?: Numerical,
-    accruedReward?: Numerical,
-    lastRecordedAccruedRewardPerRarityPoint?: Numerical,
-    beginStakingTs?: Numerical,
-    beginScheduleTs?: Numerical,
-    lastUpdatedTs?: Numerical,
-    promisedDuration?: Numerical
-  ) {
-    const [farmer] = await this.findFarmerPDA(
-      this.farm.publicKey,
-      identity.publicKey
-    );
-    const farmerAcc = (await this.fetchFarmerAcc(farmer)) as any;
-    const reward = farmerAcc[this.reward];
-
-    if (paidOutReward || paidOutReward === 0) {
-      assert(reward.paidOutReward.eq(toBN(paidOutReward)));
-    }
-    if (accruedReward || accruedReward === 0) {
-      assert(reward.accruedReward.eq(toBN(accruedReward)));
-    }
-    if (
-      lastRecordedAccruedRewardPerRarityPoint ||
-      lastRecordedAccruedRewardPerRarityPoint === 0
-    ) {
-      assert(
-        reward.variableRate.lastRecordedAccruedRewardPerRarityPoint.n
-          .div(toBN(PRECISION))
-          .eq(toBN(lastRecordedAccruedRewardPerRarityPoint))
-      );
-    }
-    if (beginStakingTs || beginStakingTs === 0) {
-      assert(reward.fixedRate.beginStakingTs.eq(toBN(beginStakingTs)));
-    }
-    if (beginScheduleTs || beginScheduleTs === 0) {
-      assert(reward.fixedRate.beginScheduleTs.eq(toBN(beginScheduleTs)));
-    }
-    if (lastUpdatedTs || lastUpdatedTs === 0) {
-      assert(reward.fixedRate.lastUpdatedTs.eq(toBN(lastUpdatedTs)));
-    }
-    if (promisedDuration || promisedDuration === 0) {
-      assert(reward.fixedRate.promisedDuration.eq(toBN(promisedDuration)));
-    }
-
-    return reward;
-  }
-
-  async verifyClaimedReward(identity: Keypair) {
-    const rewardDest = await this.findATA(
-      this.rewardMint.publicKey,
-      identity.publicKey
-    );
-    const rewardDestAcc = await this.fetchTokenAcc(
-      this.rewardMint.publicKey,
-      rewardDest
-    );
-
-    //verify that
-    //1)paid out = what's in the wallet
-    //2)accrued = what's in the wallet
-    await this.verifyFarmerReward(
-      identity,
-      rewardDestAcc.amount,
-      rewardDestAcc.amount
-    );
-
-    return rewardDestAcc.amount;
-  }
-
-  // assumes that both farmers have been staked for the same length of time
-  // tried also adding upper bound, but it breaks if f1/f2 ratio is tiny (makes tests non-deterministic)
-  async verifyAccruedRewardsVariable(minExpectedFarmAccrued: number) {
-    //fetch farmer 1
-    const farmer1Reward = await this.verifyFarmerReward(this.farmer1Identity);
-    const farmer1Accrued = farmer1Reward.accruedReward;
-
-    //fetch farmer 2
-    const farmer2Reward = await this.verifyFarmerReward(this.farmer2Identity);
-    const farmer2Accrued = farmer2Reward.accruedReward;
-
-    const { gem1: gem1Rarity, gem2: gem2Rarity } = this.calcTotalGemRarity();
-
-    //verify farmer 1
-    const farmer1Ratio =
-      gem1Rarity.toNumber() / (gem1Rarity.toNumber() + gem2Rarity.toNumber());
-
-    // console.log('farmer 1 ratio:', farmer1Ratio.toString());
-    // console.log(
-    //   'accrued for farmer 1 and 2:',
-    //   farmer1Accrued.toString(),
-    //   farmer2Accrued.toString()
-    // );
-    // console.log(
-    //   'accrued total for the farm:',
-    //   stringifyPKsAndBNs(await this.verifyFunds())
-    // );
-
-    assert(farmer1Accrued.gte(new BN(farmer1Ratio * minExpectedFarmAccrued)));
-
-    //verify farmer 2
-    const farmer2Ratio = 1 - farmer1Ratio;
-    assert(farmer2Accrued.gte(new BN(farmer2Ratio * minExpectedFarmAccrued)));
-
-    // ideally would love to do farmer1accrued + farmer2accrued,
-    // but that only works when both farmers unstake, and stop accruing
-    // (that's coz we update them sequentially, one by one)
-    const funds = await this.verifyFunds(10000, 0);
-    assert(funds.totalAccruedToStakers.gte(toBN(minExpectedFarmAccrued)));
-
-    return [farmer1Reward, farmer2Reward];
-  }
-
-  async verifyAccruedRewardsFixed(perRarityPoint: Numerical) {
-    const {
-      gem1: gem1Rarity,
-      gem2: gem2Rarity,
-      total,
-    } = this.calcTotalGemRarity();
-
-    //farmer 1
-    const farmer1Reward = await this.verifyFarmerReward(this.farmer1Identity);
-    assert(
-      farmer1Reward.accruedReward.eq(gem1Rarity.mul(toBN(perRarityPoint)))
-    );
-
-    //farmer 2
-    const farmer2Reward = await this.verifyFarmerReward(this.farmer2Identity);
-    assert(
-      farmer2Reward.accruedReward.eq(gem2Rarity.mul(toBN(perRarityPoint)))
-    );
-
-    const funds = await this.verifyFunds();
-    assert(funds.totalAccruedToStakers.gte(toBN(perRarityPoint).mul(total)));
-
-    return [farmer1Reward, farmer2Reward];
-  }
-
-  async verifyFarmerFixedRewardTimings(identity: Keypair, atStaking: boolean) {
-    let fixed = (await this.verifyFarmerReward(identity)).fixedRate;
-    const tenSecAgo = +new Date() / 1000 - 10;
-
-    //all TS within 10 sec
-    assert(fixed.beginStakingTs.gt(toBN(tenSecAgo)));
-    assert(fixed.beginScheduleTs.gt(toBN(tenSecAgo)));
-
-    //it will be equal if ran right after staking, it will be above if ran later
-    if (atStaking) {
-      assert(fixed.lastUpdatedTs.eq(fixed.beginStakingTs));
-    } else {
-      assert(fixed.lastUpdatedTs.gt(fixed.beginStakingTs));
-    }
-
-    //staking TS = schedule TS
-    assert(fixed.beginStakingTs.eq(fixed.beginScheduleTs));
-
-    //duration close to 100
-    assert(fixed.promisedDuration.gt(toBN(90)));
-    assert(fixed.promisedDuration.lte(toBN(100)));
-  }
-
-  async stakeAndVerify(identity: Keypair) {
-    const { farmer } = await this.callStake(identity);
-
-    let vaultAcc = await this.fetchVaultAcc(
-      identity === this.farmer1Identity ? this.farmer1Vault : this.farmer2Vault
-    );
-    assert.isTrue(vaultAcc.locked);
-
-    let farmerAcc = await this.fetchFarmerAcc(farmer);
-    assert(
-      farmerAcc.gemsStaked.eq(
-        identity === this.farmer1Identity ? this.gem1Amount : this.gem2Amount
-      )
-    );
-
-    const { gem1: gem1Rarity, gem2: gem2Rarity } = this.calcTotalGemRarity();
-    assert(
-      farmerAcc.rarityPointsStaked.eq(
-        identity === this.farmer1Identity ? gem1Rarity : gem2Rarity
-      )
-    );
-
-    return farmerAcc;
-  }
-
-  async unstakeOnceAndVerify(identity: Keypair) {
-    const { farmer, vault } = await this.callUnstake(identity);
-
-    const vaultAcc = await this.fetchVaultAcc(vault);
-    assert.isTrue(vaultAcc.locked);
-
-    const farmerAcc = await this.fetchFarmerAcc(farmer);
-    assert(farmerAcc.gemsStaked.eq(new BN(0)));
-    assert(farmerAcc.rarityPointsStaked.eq(new BN(0)));
-
-    return farmerAcc;
-  }
-
-  async unstakeTwiceAndVerify(identity: Keypair) {
-    const { farmer, vault } = await this.callUnstake(identity);
-
-    const vaultAcc = await this.fetchVaultAcc(vault);
-    assert.isFalse(vaultAcc.locked);
-
-    const farmerAcc = await this.fetchFarmerAcc(farmer);
-    assert(farmerAcc.gemsStaked.eq(new BN(0)));
-    assert(farmerAcc.rarityPointsStaked.eq(new BN(0)));
-
-    return farmerAcc;
-  }
-
-  // --------------------------------------- extras
-
-  async printStructs(state?: string) {
-    const farmAcc = await this.fetchFarmAcc(this.farm.publicKey);
-    console.log(`// --------------------------------------- ${state}`);
-    console.log('// --------------------------------------- farm');
-    console.log(stringifyPKsAndBNs(farmAcc));
-
-    const [farmer1] = await this.findFarmerPDA(
-      this.farm.publicKey,
-      this.farmer1Identity.publicKey
-    );
-    const farmer1Acc = await this.fetchFarmerAcc(farmer1);
-    console.log('// --------------------------------------- farmer 1');
-    console.log(stringifyPKsAndBNs(farmer1Acc));
-
-    const [farmer2] = await this.findFarmerPDA(
-      this.farm.publicKey,
-      this.farmer2Identity.publicKey
-    );
-    try {
-      const farmer2Acc = await this.fetchFarmerAcc(farmer2);
-      console.log('// --------------------------------------- farmer 2');
-      console.log(stringifyPKsAndBNs(farmer2Acc));
-    } catch (e) {}
   }
 
   async mintMoreRewards(amount: number) {

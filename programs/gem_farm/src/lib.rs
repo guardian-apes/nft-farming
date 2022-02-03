@@ -71,6 +71,17 @@ pub mod gem_farm {
         instructions::deposit_gem::handler(ctx, reward_a_tier_config)
     }
 
+    pub fn withdraw_gem(
+        ctx: Context<WithdrawGem>,
+        _bump_farm_auth: u8,
+        _bump_treasury: u8,
+        _bump_vault_auth: u8,
+        _bump_gem_box: u8,
+        _bump_pot_a: u8
+    ) -> ProgramResult {
+        instructions::withdraw_gem::handler(ctx)
+    }
+
     pub fn init_vault(
         ctx: Context<InitVault>,
         _bump: u8

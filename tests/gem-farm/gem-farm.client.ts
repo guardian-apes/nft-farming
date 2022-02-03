@@ -17,9 +17,7 @@ export const RewardType = {
 };
 
 export interface FarmConfig {
-  minStakingPeriodSec: BN;
-  cooldownPeriodSec: BN;
-  unstakingFeeLamp: BN;
+  paperHandsTaxLamp: BN;
 }
 
 export interface TierConfig {
@@ -84,10 +82,6 @@ export class GemFarmClient extends GemBankClient {
 
   async fetchFarmAcc(farm: PublicKey) {
     return this.farmProgram.account.farm.fetch(farm);
-  }
-
-  async fetchFarmerAcc(farmer: PublicKey) {
-    return this.farmProgram.account.farmer.fetch(farmer);
   }
 
   async fetchAuthorizationProofAcc(authorizationProof: PublicKey) {
@@ -179,8 +173,8 @@ export class GemFarmClient extends GemBankClient {
         },
       });
     }
-    const pdas = await this.farmProgram.account.farmer.all(filter);
-    console.log(`found a total of ${pdas.length} farmer PDAs`);
+    const pdas = await this.farmProgram.account.vault.all(filter);
+    console.log(`found a total of ${pdas.length} vault PDAs`);
     return pdas;
   }
 
@@ -336,116 +330,6 @@ export class GemFarmClient extends GemBankClient {
     };
   }
 
-  async addToBankWhitelist(
-    farm: PublicKey,
-    farmManager: PublicKey | Keypair,
-    addressToWhitelist: PublicKey,
-    whitelistType: WhitelistType
-  ) {
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-    const [whitelistProof, whitelistProofBump] =
-      await this.findWhitelistProofPDA(farmAcc.bank, addressToWhitelist);
-
-    const signers = [];
-    if (isKp(farmManager)) signers.push(<Keypair>farmManager);
-
-    console.log(`adding ${addressToWhitelist.toBase58()} to whitelist`);
-    const txSig = await this.farmProgram.rpc.addToBankWhitelist(
-      farmAuthBump,
-      whitelistProofBump,
-      whitelistType,
-      {
-        accounts: {
-          farm,
-          farmManager: isKp(farmManager)
-            ? (<Keypair>farmManager).publicKey
-            : farmManager,
-          farmAuthority: farmAuth,
-          bank: farmAcc.bank,
-          addressToWhitelist,
-          whitelistProof,
-          systemProgram: SystemProgram.programId,
-          gemBank: this.bankProgram.programId,
-        },
-        signers,
-      }
-    );
-
-    console.log({
-      farmAuthBump,
-      whitelistProofBump,
-      whitelistType,
-      config: {
-        accounts: {
-          farm: farm.toBase58(),
-          farmManager: (isKp(farmManager)
-          ? (<Keypair>farmManager).publicKey
-          : farmManager).toString(),
-          farmAuthority: farmAuth.toString(),
-          bank: farmAcc.bank.toBase58(),
-          addressToWhitelist: addressToWhitelist.toBase58(),
-          whitelistProof: whitelistProof.toBase58(),
-          systemProgram: SystemProgram.programId.toBase58(),
-          gemBank: this.bankProgram.programId.toBase58(),
-        },
-        signers,
-      }
-    })
-
-    return {
-      farmAuth,
-      farmAuthBump,
-      whitelistProof,
-      whitelistProofBump,
-      txSig,
-    };
-  }
-
-  async removeFromBankWhitelist(
-    farm: PublicKey,
-    farmManager: PublicKey | Keypair,
-    addressToRemove: PublicKey
-  ) {
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-    const [whitelistProof, whitelistProofBump] =
-      await this.findWhitelistProofPDA(farmAcc.bank, addressToRemove);
-
-    const signers = [];
-    if (isKp(farmManager)) signers.push(<Keypair>farmManager);
-
-    console.log(`removing ${addressToRemove.toBase58()} from whitelist`);
-    const txSig = await this.farmProgram.rpc.removeFromBankWhitelist(
-      farmAuthBump,
-      whitelistProofBump,
-      {
-        accounts: {
-          farm,
-          farmManager: isKp(farmManager)
-            ? (<Keypair>farmManager).publicKey
-            : farmManager,
-          farmAuthority: farmAuth,
-          bank: farmAcc.bank,
-          addressToRemove,
-          whitelistProof,
-          gemBank: this.bankProgram.programId,
-        },
-        signers,
-      }
-    );
-
-    return {
-      farmAuth,
-      farmAuthBump,
-      whitelistProof,
-      whitelistProofBump,
-      txSig,
-    };
-  }
-
   // --------------------------------------- farmer ops ixs
 
   async initVault(
@@ -476,209 +360,6 @@ export class GemFarmClient extends GemBankClient {
     });
 
     return { vault, vaultBump, txSig };
-  }
-
-  async initFarmer(
-    farm: PublicKey,
-    farmerIdentity: PublicKey | Keypair,
-    payer: PublicKey | Keypair
-  ) {
-    const identityPk = isKp(farmerIdentity)
-      ? (<Keypair>farmerIdentity).publicKey
-      : <PublicKey>farmerIdentity;
-
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
-    const [vault, vaultBump] = await this.findVaultPDA(
-      farmAcc.bank,
-      identityPk
-    );
-    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault); //nice-to-have
-
-    const signers = [];
-    if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
-    if (isKp(payer)) signers.push(<Keypair>payer);
-
-    console.log('adding farmer', identityPk.toBase58());
-    const txSig = await this.farmProgram.rpc.initFarmer(farmerBump, vaultBump, {
-      accounts: {
-        farm,
-        farmer,
-        identity: identityPk,
-        payer: isKp(payer) ? (<Keypair>payer).publicKey : payer,
-        bank: farmAcc.bank,
-        vault,
-        gemBank: this.bankProgram.programId,
-        systemProgram: SystemProgram.programId,
-      },
-      signers,
-    });
-
-    return {
-      farmer,
-      farmerBump,
-      vault,
-      vaultBump,
-      vaultAuth,
-      vaultAuthBump,
-      txSig,
-    };
-  }
-
-  async instantWithdraw(
-    farm: PublicKey,
-    farmerIdentity: PublicKey | Keypair,
-    gemMint: PublicKey,
-  ) {
-    const identityPk = isKp(farmerIdentity)
-    ? (<Keypair>farmerIdentity).publicKey
-    : <PublicKey>farmerIdentity;
-
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
-    const [vault, vaultBump] = await this.findVaultPDA(
-      farmAcc.bank,
-      identityPk
-    );
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault, gemMint);
-    const [GDR, GDRBump] = await this.findGdrPDA(vault, gemMint);
-    const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault);
-    const [gemRarity, gemRarityBump] = await this.findRarityPDA(
-      farmAcc.bank,
-      gemMint
-    );
-    const gemDestination = await this.findATA(gemMint, identityPk);
-
-    const signers = [];
-    if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
-
-    console.log('instant withdrawing on behalf of', identityPk.toBase58());
-    const txSig = await (this.farmProgram.rpc.instantWithdraw as any)(
-      farmerBump,
-      vaultAuthBump,
-      gemBoxBump,
-      GDRBump,
-      gemRarityBump,
-      new BN(1),// withdrawing one gem
-      {
-        accounts: {
-          farm,
-          farmAuthority: farmAuth,
-          farmer,
-          identity: identityPk,
-          bank: farmAcc.bank,
-          vault,
-          vaultAuthority: vaultAuth,
-          gemBox,
-          gemDepositReceipt: GDR,
-          gemDestination,
-          // gemSource,
-          gemMint,
-          gemRarity,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          gemBank: this.bankProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID
-        },
-        signers,
-      }
-    );
-
-    return {
-      txSig,
-      vault,
-      farmer,
-      farm,
-      farmAcc,
-      GDR
-    }
-  }
-
-  async stakeCommon(
-    farm: PublicKey,
-    farmerIdentity: PublicKey | Keypair,
-    unstake = false
-  ) {
-    const identityPk = isKp(farmerIdentity)
-      ? (<Keypair>farmerIdentity).publicKey
-      : <PublicKey>farmerIdentity;
-
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
-    const [vault, vaultBump] = await this.findVaultPDA(
-      farmAcc.bank,
-      identityPk
-    );
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-    const [farmTreasury, farmTreasuryBump] = await this.findFarmTreasuryPDA(
-      farm
-    );
-
-    const signers = [];
-    if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
-
-    let txSig;
-    if (unstake) {
-      console.log('UNstaking gems for', identityPk.toBase58());
-      txSig = await this.farmProgram.rpc.unstake(
-        farmAuthBump,
-        farmTreasuryBump,
-        farmerBump,
-        {
-          accounts: {
-            farm,
-            farmer,
-            farmTreasury,
-            identity: identityPk,
-            bank: farmAcc.bank,
-            vault,
-            farmAuthority: farmAuth,
-            gemBank: this.bankProgram.programId,
-            systemProgram: SystemProgram.programId,
-          },
-          signers,
-        }
-      );
-    } else {
-      console.log('staking gems for', identityPk.toBase58());
-      txSig = await this.farmProgram.rpc.stake(farmAuthBump, farmerBump, {
-        accounts: {
-          farm,
-          farmer,
-          identity: identityPk,
-          bank: farmAcc.bank,
-          vault,
-          farmAuthority: farmAuth,
-          gemBank: this.bankProgram.programId,
-        },
-        signers,
-      });
-    }
-
-    return {
-      farmer,
-      farmerBump,
-      vault,
-      vaultBump,
-      farmAuth,
-      farmAuthBump,
-      farmTreasury,
-      farmTreasuryBump,
-      txSig,
-    };
-  }
-
-  async stake(farm: PublicKey, farmerIdentity: PublicKey | Keypair) {
-    return this.stakeCommon(farm, farmerIdentity, false);
-  }
-
-  async unstake(farm: PublicKey, farmerIdentity: PublicKey | Keypair) {
-    return this.stakeCommon(farm, farmerIdentity, true);
   }
 
   async claim(
@@ -734,107 +415,56 @@ export class GemFarmClient extends GemBankClient {
     };
   }
 
-  async flashDeposit(
+  async withdrawGemFromVault(
     farm: PublicKey,
-    farmerIdentity: PublicKey | Keypair,
-    gemAmount: BN,
+    vaultOwner: Keypair,
     gemMint: PublicKey,
-    gemSource: PublicKey,
-    mintProof?: PublicKey,
-    metadata?: PublicKey,
-    creatorProof?: PublicKey
+    rewardAMint: PublicKey
   ) {
-    const identityPk = isKp(farmerIdentity)
-      ? (<Keypair>farmerIdentity).publicKey
-      : <PublicKey>farmerIdentity;
-
-    const farmAcc = await this.fetchFarmAcc(farm);
-
-    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
-    const [vault, vaultBump] = await this.findVaultPDA(
-      farmAcc.bank,
-      identityPk
-    );
+    const [vault] = await this.findVaultPDA(farm, vaultOwner.publicKey, gemMint)
+    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault);
     const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-
-    const [gemBox, gemBoxBump] = await this.findGemBoxPDA(vault, gemMint);
-    const [GDR, GDRBump] = await this.findGdrPDA(vault, gemMint);
     const [vaultAuth, vaultAuthBump] = await this.findVaultAuthorityPDA(vault);
-    const [gemRarity, gemRarityBump] = await this.findRarityPDA(
-      farmAcc.bank,
-      gemMint
+    const gemDestination = await this.findATA(gemMint, vaultOwner.publicKey)
+    const [farmTreasury, farmTreasuryBump] = await this.findFarmTreasuryPDA(
+      farm
     );
-
-    const remainingAccounts = [];
-    if (mintProof)
-      remainingAccounts.push({
-        pubkey: mintProof,
-        isWritable: false,
-        isSigner: false,
-      });
-    if (metadata)
-      remainingAccounts.push({
-        pubkey: metadata,
-        isWritable: false,
-        isSigner: false,
-      });
-    if (creatorProof)
-      remainingAccounts.push({
-        pubkey: creatorProof,
-        isWritable: false,
-        isSigner: false,
-      });
-
-    const signers = [];
-    if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
-
-    console.log('flash depositing on behalf of', identityPk.toBase58());
-    const txSig = await this.farmProgram.rpc.flashDeposit(
-      farmerBump,
-      vaultAuthBump,
-      gemBoxBump,
-      GDRBump,
-      gemRarityBump,
-      gemAmount,
-      {
-        accounts: {
-          farm,
-          farmAuthority: farmAuth,
-          farmer,
-          identity: identityPk,
-          bank: farmAcc.bank,
-          vault,
-          vaultAuthority: vaultAuth,
-          gemBox,
-          gemDepositReceipt: GDR,
-          gemSource,
-          gemMint,
-          gemRarity,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          gemBank: this.bankProgram.programId,
-        },
-        remainingAccounts,
-        signers,
-      }
+    const [rewardAPot, rewardAPotBump] = await this.findRewardsPotPDA(
+      farm,
+      rewardAMint
     );
+    const rewardADestination = await this.findATA(rewardAMint, vaultOwner.publicKey);
+  
+    console.log(`withdrawing 1 gem from vault ${vault} on farm ${farm}`)
+
+    const txSig = await this.farmProgram.rpc.withdrawGem(farmAuthBump, farmTreasuryBump, vaultAuthBump, gemBoxBump, rewardAPotBump, {
+      accounts: {
+        farm,
+        gemMint,
+        gemBox,
+        vault,
+        farmTreasury,
+        rewardADestination,
+        rewardAMint,
+        farmAuthority: farmAuth,
+        rewardAPot,
+        owner: vaultOwner.publicKey,
+        authority: vaultAuth,
+        gemDestination,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      },
+      signers: [vaultOwner]
+    });
 
     return {
-      farmer,
-      farmerBump,
-      vault,
-      vaultBump,
-      farmAuth,
-      farmAuthBump,
-      gemBox,
-      gemBoxBump,
-      GDR,
-      GDRBump,
-      vaultAuth,
-      vaultAuthBump,
       txSig,
-    };
+      gemBoxBump,
+      gemBox,
+      gemDestination
+    }
   }
 
   async depositGem(
@@ -950,54 +580,6 @@ export class GemFarmClient extends GemBankClient {
       vault,
       mint,
     ]);
-  }
-
-  async refreshFarmer(
-    farm: PublicKey,
-    farmerIdentity: PublicKey | Keypair,
-    reenroll?: boolean
-  ) {
-    const identityPk = isKp(farmerIdentity)
-      ? (<Keypair>farmerIdentity).publicKey
-      : <PublicKey>farmerIdentity;
-
-    const [farmer, farmerBump] = await this.findFarmerPDA(farm, identityPk);
-
-    let txSig;
-    if (reenroll !== null && reenroll !== undefined) {
-      const signers = [];
-      if (isKp(farmerIdentity)) signers.push(<Keypair>farmerIdentity);
-
-      console.log('refreshing farmer (SIGNED)', identityPk.toBase58());
-      txSig = await this.farmProgram.rpc.refreshFarmerSigned(
-        farmerBump,
-        reenroll,
-        {
-          accounts: {
-            farm,
-            farmer,
-            identity: identityPk,
-          },
-          signers,
-        }
-      );
-    } else {
-      console.log('refreshing farmer', identityPk.toBase58());
-      txSig = await this.farmProgram.rpc.refreshFarmer(farmerBump, {
-        accounts: {
-          farm,
-          farmer,
-          identity: identityPk,
-        },
-        signers: [],
-      });
-    }
-
-    return {
-      farmer,
-      farmerBump,
-      txSig,
-    };
   }
 
   // --------------------------------------- funder ops ixs
@@ -1123,137 +705,6 @@ export class GemFarmClient extends GemBankClient {
     };
   }
 
-  async cancelReward(
-    farm: PublicKey,
-    farmManager: PublicKey | Keypair,
-    rewardMint: PublicKey,
-    receiver: PublicKey
-  ) {
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-    const [pot, potBump] = await this.findRewardsPotPDA(farm, rewardMint);
-    const rewardDestination = await this.findATA(rewardMint, receiver);
-
-    const signers = [];
-    if (isKp(farmManager)) signers.push(<Keypair>farmManager);
-
-    const txSig = await this.farmProgram.rpc.cancelReward(
-      farmAuthBump,
-      potBump,
-      {
-        accounts: {
-          farm,
-          farmManager: isKp(farmManager)
-            ? (<Keypair>farmManager).publicKey
-            : farmManager,
-          farmAuthority: farmAuth,
-          rewardPot: pot,
-          rewardDestination,
-          rewardMint,
-          receiver,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        },
-        signers,
-      }
-    );
-
-    return {
-      farmAuth,
-      farmAuthBump,
-      pot,
-      potBump,
-      rewardDestination,
-      txSig,
-    };
-  }
-
-  async lockReward(
-    farm: PublicKey,
-    farmManager: PublicKey | Keypair,
-    rewardMint: PublicKey
-  ) {
-    const signers = [];
-    if (isKp(farmManager)) signers.push(<Keypair>farmManager);
-
-    const txSig = await this.farmProgram.rpc.lockReward({
-      accounts: {
-        farm,
-        farmManager: isKp(farmManager)
-          ? (<Keypair>farmManager).publicKey
-          : farmManager,
-        rewardMint,
-      },
-      signers,
-    });
-
-    return { txSig };
-  }
-
-  // --------------------------------------- rarity
-
-  async addRaritiesToBank(
-    farm: PublicKey,
-    farmManager: PublicKey | Keypair,
-    rarityConfigs: RarityConfig[]
-  ) {
-    const farmAcc = await this.fetchFarmAcc(farm);
-    const bank = farmAcc.bank;
-
-    const [farmAuth, farmAuthBump] = await this.findFarmAuthorityPDA(farm);
-
-    //prepare rarity configs
-    const completeRarityConfigs = [...rarityConfigs];
-    const remainingAccounts = [];
-
-    for (const config of completeRarityConfigs) {
-      const [gemRarity] = await this.findRarityPDA(bank, config.mint);
-      //add mint
-      remainingAccounts.push({
-        pubkey: config.mint,
-        isWritable: false,
-        isSigner: false,
-      });
-      //add rarity pda
-      remainingAccounts.push({
-        pubkey: gemRarity,
-        isWritable: true,
-        isSigner: false,
-      });
-    }
-
-    const signers = [];
-    if (isKp(farmManager)) signers.push(<Keypair>farmManager);
-
-    console.log("adding rarities to farm's bank");
-    const txSig = await this.farmProgram.rpc.addRaritiesToBank(
-      farmAuthBump,
-      completeRarityConfigs,
-      {
-        accounts: {
-          farm,
-          farmManager: isKp(farmManager)
-            ? (<Keypair>farmManager).publicKey
-            : farmManager,
-          farmAuthority: farmAuth,
-          bank,
-          gemBank: this.bankProgram.programId,
-          systemProgram: SystemProgram.programId,
-        },
-        remainingAccounts,
-        signers,
-      }
-    );
-
-    return {
-      bank,
-      farmAuth,
-      farmAuthBump,
-      completeRarityConfigs,
-      txSig,
-    };
-  }
 
   // --------------------------------------- helpers
 

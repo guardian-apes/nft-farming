@@ -21,7 +21,7 @@ describe('depositing gems into vault', () => {
 
   beforeEach('preps accs', async () => {
     await gf.prepAccounts(10000000, gf.randomInt(1, 3), 0.1); // 0.1 for rewardA
-    await gf.callInitFarm(defaultFarmConfig, RewardType.Fixed);
+    await gf.callInitFarm(defaultFarmConfig);
     await gf.callInitVault(gf.farmer1Identity, gf.gem1.tokenMint);
     await gf.callInitVault(gf.farmer2Identity, gf.gem2.tokenMint);
     await gf.callAuthorize();
