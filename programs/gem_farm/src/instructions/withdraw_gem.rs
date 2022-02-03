@@ -151,7 +151,6 @@ pub fn handler(
         // if there is a paper hands tax, charge the user
         if farm.config.paper_hands_tax_lamp > 0 {
             let farm = &*ctx.accounts.farm;
-            let vault = &*ctx.accounts.vault;
 
             ctx.accounts.pay_treasury(farm.config.paper_hands_tax_lamp)?;
         } else {
