@@ -8,9 +8,10 @@ use metaplex_token_metadata::state::Metadata;
 use crate::state::*;
 
 #[derive(Accounts)]
-#[instruction(bump_auth: u8, bump_gem_box: u8, bump_gdr: u8)]
+#[instruction(bump_auth: u8, bump_gem_box: u8)]
 pub struct DepositGem<'info> {
     // farm
+    #[account(mut)]
     pub farm: Box<Account<'info, Farm>>,
 
     // vault
@@ -29,22 +30,13 @@ pub struct DepositGem<'info> {
     #[account(init_if_needed, seeds = [
             b"gem_box".as_ref(),
             vault.key().as_ref(),
-            gem_mint.key().as_ref(),
         ],
         bump = bump_gem_box,
         token::mint = gem_mint,
         token::authority = authority,
         payer = owner)]
     pub gem_box: Box<Account<'info, TokenAccount>>,
-    #[account(init_if_needed, seeds = [
-            b"gem_deposit_receipt".as_ref(),
-            vault.key().as_ref(),
-            gem_mint.key().as_ref(),
-        ],
-        bump = bump_gdr,
-        payer = owner,
-        space = 8 + std::mem::size_of::<GemDepositReceipt>())]
-    pub gem_deposit_receipt: Box<Account<'info, GemDepositReceipt>>,
+
     #[account(mut)]
     pub gem_source: Box<Account<'info, TokenAccount>>,
     pub gem_mint: Box<Account<'info, Mint>>,
@@ -167,10 +159,12 @@ fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
     Err(ErrorCode::NotWhitelisted.into())
 }
 
-pub fn handler(ctx: Context<DepositGem>, amount: u64) -> ProgramResult {
+pub fn handler(ctx: Context<DepositGem>, reward_a_tier_config: Option<TierConfig>) -> ProgramResult {
     // if even a single whitelist exists, verify the token against it
     let farm = &*ctx.accounts.farm;
     let vault = &*ctx.accounts.vault;
+
+    let now = now_ts()?;
 
     if vault.access_suspended()? {
         return Err(ErrorCode::VaultAccessSuspended.into());
@@ -180,33 +174,33 @@ pub fn handler(ctx: Context<DepositGem>, amount: u64) -> ProgramResult {
         assert_whitelisted(&ctx)?;
     }
 
+    // validate tier_config for fixed reward types.
+    // if no tier config was passed, then we use tier0
+    if matches!(farm.reward_a.reward_type, RewardType::Fixed) && reward_a_tier_config.is_some() {
+        farm.reward_a.fixed_rate.schedule.assert_valid_tier_config(reward_a_tier_config.unwrap())?;
+    }
+
     // do the transfer
     token::transfer(
         ctx.accounts
             .transfer_ctx()
             .with_signer(&[&vault.vault_seeds()]),
-        amount,
+        1, // its an nft. it's always gonna be 1.
     )?;
 
     let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
     let gem_box = &*ctx.accounts.gem_box;
 
-    // record number of vaults on farm
-    farm.vault_count.try_add_assign(1)?;
+    // 1. calculate how much we're reserving for this deposited gem
+    // 2. record that amount on the farm reward (rewardA and rewardB)
+    // 3. record the deposit time
+    // 4. record the deposit tier the user selected
+    farm.reserve_rewards(vault, now, reward_a_tier_config)?;
 
     // record the gem on vault and lock the vault
     vault.locked = true;
     vault.gem_mint = gem_box.mint;
 
-    // record a gdr
-    let gdr = &mut *ctx.accounts.gem_deposit_receipt;
-    
-    gdr.vault = vault.key();
-    gdr.gem_box_address = gem_box.key();
-    gdr.gem_mint = gem_box.mint;
-    gdr.gem_count.try_add_assign(amount)?;
-
-    // msg!("{} gems deposited into {} gem box", amount, gem_box.key());
     Ok(())
 }

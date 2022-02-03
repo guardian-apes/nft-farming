@@ -27,9 +27,14 @@ pub enum ErrorCode {
     #[msg("two amounts that are supposed to be equal are not")]
     AmountMismatch,
 
-    Reserved5,
-    Reserved6,
-    Reserved7,
+    #[msg("we do not currently support the variable rate reward type")]
+    InvalidRewardType,
+
+    #[msg("invalid tier configuration. the deposit gem tier configuration must exist on the farm")]
+    InvalidTierConfig,
+
+    #[msg("insufficient funds in farm. please fund the farm rewards.")]
+    InsufficientFunding,
     Reserved8,
     Reserved9,
     Reserved10,
@@ -56,8 +61,6 @@ pub enum ErrorCode {
     #[msg("whitelist proof exists but for the wrong type")]
     WrongWhitelistType,
 
-    Reserved24,
-    Reserved25,
     Reserved26,
     Reserved27,
     Reserved28,

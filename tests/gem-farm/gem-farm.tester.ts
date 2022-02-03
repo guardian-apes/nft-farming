@@ -5,9 +5,11 @@ import { BN } from '@project-serum/anchor';
 import {
   FarmConfig,
   FixedRateConfig,
+  FixedRateSchedule,
   GemFarmClient,
   RarityConfig,
   RewardType,
+  TierConfig,
   VariableRateConfig,
 } from './gem-farm.client';
 import { Token } from '@solana/spl-token';
@@ -34,7 +36,10 @@ export const defaultVariableConfig = <VariableRateConfig>{
 export const defaultFixedConfig = <FixedRateConfig>{
   schedule: {
     //total 30 per gem
-    baseRate: toBN(3),
+    tier0: {
+      rewardRate: toBN(1),
+      requiredTenure: toBN(0),
+    },
     tier1: {
       rewardRate: toBN(5),
       requiredTenure: toBN(2),
@@ -45,13 +50,11 @@ export const defaultFixedConfig = <FixedRateConfig>{
     },
     //leaving this one at 0 so that it's easy to test how much accrued over first 6s
     tier3: {
-      rewardRate: toBN(0),
+      rewardRate: toBN(9),
       requiredTenure: toBN(6),
     },
     denominator: toBN(1),
   },
-  amount: new BN(30000), //fund 1000 gems
-  durationSec: new BN(100),
 };
 
 // --------------------------------------- tester class
@@ -83,7 +86,11 @@ export class GemFarmTester extends GemFarmClient {
   gem1!: ITokenData;
   gem1PerGemRarity!: number;
   gem2Amount!: anchor.BN;
+  gem3Amount!: anchor.BN;
+  gem4Amount!: anchor.BN;
   gem2!: ITokenData;
+  gem3!: ITokenData;
+  gem4!: ITokenData;
   gem2PerGemRarity!: number;
 
   constructor() {
@@ -104,7 +111,7 @@ export class GemFarmTester extends GemFarmClient {
     gem2PerGemRarity: number = 1,
     reward?: string
   ) {
-    reward = Math.random() < 0.5 ? 'rewardA' : 'rewardB';
+    reward = 'rewardA';
     console.log('running tests for', reward);
 
     this.bank = Keypair.generate();
@@ -114,16 +121,9 @@ export class GemFarmTester extends GemFarmClient {
     this.farmer1Identity = await this.nw.createFundedWallet(
       100 * LAMPORTS_PER_SOL
     );
-    [this.farmer1Vault] = await this.findVaultPDA(
-      this.farm.publicKey,
-      this.farmer1Identity.publicKey
-    );
+
     this.farmer2Identity = await this.nw.createFundedWallet(
       100 * LAMPORTS_PER_SOL
-    );
-    [this.farmer2Vault] = await this.findVaultPDA(
-      this.farm.publicKey,
-      this.farmer2Identity.publicKey
     );
 
     if (reward) this.reward = reward;
@@ -143,6 +143,16 @@ export class GemFarmTester extends GemFarmClient {
 
     //gem 2
     ({ gemAmount: this.gem2Amount, gem: this.gem2 } = await this.prepGem(
+      this.farmer2Identity
+    ));
+
+    //gem 3
+    ({ gemAmount: this.gem3Amount, gem: this.gem3 } = await this.prepGem(
+      this.farmer1Identity
+    ));
+
+    //gem 4
+    ({ gemAmount: this.gem4Amount, gem: this.gem4 } = await this.prepGem(
       this.farmer2Identity
     ));
     this.gem2PerGemRarity = gem2PerGemRarity;
@@ -191,10 +201,9 @@ export class GemFarmTester extends GemFarmClient {
       this.farm,
       this.farmManager,
       this.farmManager,
-      isRewardA ? this.rewardMint.publicKey : this.rewardSecondMint.publicKey,
-      rewardType ?? RewardType.Variable,
-      isRewardA ? this.rewardSecondMint.publicKey : this.rewardMint.publicKey,
-      rewardType ?? RewardType.Variable,
+      this.rewardMint.publicKey,
+      RewardType.Fixed,
+      defaultFixedConfig.schedule,
       farmConfig
     );
   }
@@ -243,8 +252,8 @@ export class GemFarmTester extends GemFarmClient {
     return this.initFarmer(this.farm.publicKey, identity, identity);
   }
 
-  async callInitVault(identity: Keypair) {
-    return this.initVault(this.farm.publicKey, identity, identity, identity.publicKey, 'test_vault');
+  async callInitVault(identity: Keypair, token: PublicKey) {
+    return this.initVault(this.farm.publicKey, identity, token);
   }
 
   async callStake(identity: Keypair) {
@@ -267,18 +276,17 @@ export class GemFarmTester extends GemFarmClient {
     return this.unstake(this.farm.publicKey, identity);
   }
 
-  async callDeposit(gems: Numerical, identity: Keypair) {
+  async callDeposit(identity: Keypair, tierSchedule: TierConfig|null = null) {
     const isFarmer1 =
       identity.publicKey.toBase58() ===
       this.farmer1Identity.publicKey.toBase58();
 
     return this.depositGem(
       this.farm.publicKey,
-      isFarmer1 ? this.farmer1Vault : this.farmer2Vault,
-      identity,
-      toBN(gems),
+      isFarmer1 ? this.farmer1Identity : this.farmer2Identity,
       isFarmer1 ? this.gem1.tokenMint : this.gem2.tokenMint,
-      isFarmer1 ? this.gem1.tokenAcc : this.gem2.tokenAcc
+      isFarmer1 ? this.gem1.tokenAcc : this.gem2.tokenAcc,
+      tierSchedule
     );
   }
 
@@ -297,14 +305,12 @@ export class GemFarmTester extends GemFarmClient {
     );
   }
 
-  async callClaimRewards(identity: Keypair) {
-    const isRewardA = this.reward === 'rewardA';
-
+  async callClaimRewards(identity: Keypair, gemMint: PublicKey) {
     return this.claim(
       this.farm.publicKey,
       identity,
-      isRewardA ? this.rewardMint.publicKey : this.rewardSecondMint.publicKey,
-      isRewardA ? this.rewardSecondMint.publicKey : this.rewardMint.publicKey
+      this.rewardMint.publicKey,
+      gemMint
     );
   }
 
@@ -355,17 +361,13 @@ export class GemFarmTester extends GemFarmClient {
 
   // ----------------- rewards
 
-  async callFundReward(
-    varConfig?: VariableRateConfig,
-    fixedConfig?: FixedRateConfig
-  ) {
+  async callFundReward(amount: BN) {
     return this.fundReward(
       this.farm.publicKey,
       this.rewardMint.publicKey,
       this.funder,
       this.rewardSource,
-      varConfig,
-      fixedConfig
+      amount
     );
   }
 
@@ -503,6 +505,9 @@ export class GemFarmTester extends GemFarmClient {
       this.rewardMint.publicKey,
       pot
     );
+
+    console.log('@rewardsPotAcc', rewardsPotAcc.amount.toNumber())
+
     switch (sign) {
       case 'lt':
         assert(rewardsPotAcc.amount.lt(toBN(amount)));

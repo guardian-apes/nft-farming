@@ -54,27 +54,12 @@ impl<'info> FundReward<'info> {
 
 pub fn handler(
     ctx: Context<FundReward>,
-    variable_rate_config: Option<VariableRateConfig>,
-    fixed_rate_config: Option<FixedRateConfig>,
+    amount: u64
 ) -> ProgramResult {
-    let amount = if let Some(config) = variable_rate_config {
-        config.amount
-    } else {
-        fixed_rate_config.unwrap().amount
-    };
-
     // update existing rewards + record new ones
     let farm = &mut ctx.accounts.farm;
-    let now_ts = now_ts()?;
 
-    farm.update_rewards(now_ts, None, true)?;
-
-    farm.fund_reward_by_mint(
-        now_ts,
-        ctx.accounts.reward_mint.key(),
-        variable_rate_config,
-        fixed_rate_config,
-    )?;
+    farm.fund_reward(amount)?;
 
     // do the transfer
     token::transfer(
