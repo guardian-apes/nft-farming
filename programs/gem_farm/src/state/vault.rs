@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use gem_common::{errors::ErrorCode, *};
 
-use crate::{number128::Number128, state::*};
+use crate::{state::*};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]

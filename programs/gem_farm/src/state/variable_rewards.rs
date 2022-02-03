@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
-use gem_common::*;
 
-use crate::{number128::Number128, state::*};
+use crate::{number128::Number128};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize, PartialEq)]

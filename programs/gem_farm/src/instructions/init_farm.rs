@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::state::*;
-use gem_common::{errors::ErrorCode, *};
+use gem_common::{errors::ErrorCode};
 
 #[derive(Accounts)]
 #[instruction(bump_auth: u8, bump_treasury: u8, bump_pot_a: u8)]

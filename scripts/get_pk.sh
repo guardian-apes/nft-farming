@@ -1,1 +1,0 @@
-solana-keygen pubkey ./target/deploy/gem_bank-keypair.json
