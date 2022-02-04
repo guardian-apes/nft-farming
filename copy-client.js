@@ -13,7 +13,7 @@ function copy() {
     filesToCopy.forEach(([from, to]) => {
         Fs.copyFileSync(
             Path.resolve(__dirname, from),
-            Path.resolve(__dirname, '..', 'app.guardianapes.com', to)
+            Path.resolve(__dirname, '..', 'solfarms.io', to)
         )
     })
 }

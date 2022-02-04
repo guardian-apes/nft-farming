@@ -63,6 +63,9 @@ describe('withdraws gems from vault', () => {
     await expect(
       gf.fetchGemAcc(gf.gem1.tokenMint, gemBoxPDA)
     ).to.be.rejectedWith('Failed to find account');
+
+    // make sure vault is closed after withdrawal
+    await expect( gf.fetchVaultAcc(vault)).to.be.rejectedWith(`Account does not exist ${vault.toBase58()}`);
   });
 
   it('deposit gem (with paper hands tax) -> wait 5 seconds -> withdraw gem (tier3) -> break bank -> farm reserved updated', async () => {

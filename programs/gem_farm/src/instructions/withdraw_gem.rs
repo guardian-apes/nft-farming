@@ -101,17 +101,6 @@ impl<'info> WithdrawGem<'info> {
         )
     }
 
-    fn close_vault_ctx(&self) -> CpiContext<'_, '_, '_, 'info, CloseAccount<'info>> {
-        CpiContext::new(
-            self.token_program.to_account_info(),
-            CloseAccount {
-                account: self.gem_box.to_account_info(),
-                destination: self.owner.to_account_info(),
-                authority: self.authority.clone(),
-            },
-        )
-    }
-
     fn transfer_a_ctx(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         CpiContext::new(
             self.token_program.to_account_info(),
@@ -190,11 +179,10 @@ pub fn handler(
             .with_signer(&[&vault.vault_seeds()]),
     )?;
 
-    token::close_account(
-        ctx.accounts
-            .close_vault_ctx()
-            .with_signer(&[&vault.vault_seeds()]),
-    )?;
+    let owner = &mut ctx.accounts.owner.to_account_info();
+    let vault = &mut (*ctx.accounts.vault).to_account_info();
+
+    close_account(vault, owner)?;
 
     Ok(())
 }
