@@ -13,11 +13,18 @@ pub enum FixedRateRewardTier {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct TierConfig {
-    /// tokens/denominator/rarity point / sec
-    pub reward_rate: u64,
+    pub reward_rate: u64, // this value will be how much we want to reward per day
+    // we'll pass a denominator of 86,400 if we wanted to slow this down.
+    // say we want to reward 10 $eGARD per day.
+    // we'll store reward_rate as 10, and denominator as 86,400
+    // next, say we wanted this reward to come with a staking period of 60 days.
+    // we'll store required_tenure as 60*86400 = 5,184,000. 
+    // The total amount reserved from the farm funds will be (reward_rate / denominator) * required_tenure
+    // which will equal 600, resulting in the initial 60 days staking * 10 per day.
+    
 
-    /// min amount of time that needs to pass for the above rate to come into effect
-    pub required_tenure: u64,
+    /// lock duration to earn the above reward rate
+    pub required_tenure: u64, // we'll save this value in seconds. so 60 days will be 60 * 86400 stored here.
 }
 
 impl Default for TierConfig {

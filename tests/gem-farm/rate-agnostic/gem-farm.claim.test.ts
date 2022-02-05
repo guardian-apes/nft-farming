@@ -141,4 +141,6 @@ describe('claim rewards from vault  (after tenure completed)', () => {
     // the max that will ever be paid out is the reserved amount
     assert.equal(vaultAcc.rewardA.paidOutReward.toNumber(), vaultAcc.rewardA.reservedAmount.toNumber())
   })
+
+  it.only('claiming after tenure twice does not overpay and does not run into math errors', () => {})
 });

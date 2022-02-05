@@ -29,11 +29,31 @@ impl VaultReward {
             return Ok(unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?);
         }
 
+        // in some scenarios, the last_rewards_claimed_at might be more than expiry
+        // in a unique situation where a farmer claimed tokens before expiry
+        // this claim sets the last_rewards_claimed_at
+        // after expiry the farmer attempts to claim again, which works
+        // and sets the last_rewards_claimed_at to after expiry time
+        // but the next claim is going to have some problems, because the
+        // last_rewards_claimed_at is now more than tenure_expiry and we cannot subtract them anymore
+        if self.last_rewards_claimed_at > tenure_expiry {
+            // this is a scenario where the user has claimed tokens after expiry.
+            // meaning they have nothing else to claim
+            // so we return zero
+            return Ok(0);
+        }
+
         let unclaimed_rewards_time = tenure_expiry.try_sub(self.last_rewards_claimed_at)?;
 
         let outstanding_reward = unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?;
 
         Ok(outstanding_reward)
+    }
+
+    pub fn computed_reward_rate(&self, denominator: u64) -> u64 {
+        let computed_rate = self.reward_tier.reward_rate.try_div(denominator)?;
+
+        computed_rate
     }
 
     pub fn claim_rewards(&mut self, pot_balance: u64, now: u64) -> Result<u64, ProgramError> {

@@ -99,6 +99,9 @@ impl Farm {
 
         self.reward_a.funds.total_accrued_to_stakers.try_sub_assign(unreserve_amount)?;
 
+        // since we're here let's be sure to reduce the number of vaults on the farm
+        self.vault_count.try_sub_assign(1)?;
+
         Ok(())
     }
 }
