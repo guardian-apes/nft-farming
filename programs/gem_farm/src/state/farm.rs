@@ -109,13 +109,6 @@ impl Farm {
         Ok(())
     }
 
-    pub fn decrement_stake_count(&mut self) -> ProgramResult {
-        // record number of vaults on farm
-        self.vault_count.try_sub_assign(1)?;
-
-        Ok(())
-    }
-
     pub fn unreserve_rewards(&mut self, vault: &mut Vault, now: u64) -> ProgramResult {
         // amount we unreserve is total paid out + any outstanding rewards to be paid out
         let unreserve_amount = vault.reward_a.paid_out_reward.try_add(

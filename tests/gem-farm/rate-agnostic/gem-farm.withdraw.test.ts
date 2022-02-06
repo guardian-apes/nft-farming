@@ -40,7 +40,7 @@ describe('withdraws gems from vault', () => {
 
     const farmAccount = await gf.fetchFarmAcc(farm)
     const prevAccount = await gf.fetchTokenAcc(gf.gem1.tokenMint, gemDestination)
-    
+
     const [gemBoxPDA] = await gf.findGemBoxPDA(vault)
 
     const gemBoxPDAAccount = await gf.fetchGemAcc(gf.gem1.tokenMint, gemBoxPDA)
@@ -72,8 +72,7 @@ describe('withdraws gems from vault', () => {
     // make sure vault is closed after withdrawal
     await expect( gf.fetchVaultAcc(vault)).to.be.rejectedWith(`Account does not exist ${vault.toBase58()}`);
   });
-
-  it.only('deposit gem (with paper hands tax) -> wait 5 seconds -> withdraw gem (tier3) -> break bank -> farm reserved updated', async () => {
+  it('deposit gem (with paper hands tax) -> wait 5 seconds -> withdraw gem (tier3) -> break bank -> farm reserved updated', async () => {
     // Prep second farm
     const farmConfig = {
       paperHandsTaxLamp: new BN(LAMPORTS_PER_SOL).mul(new BN(5)) // paper hands tax is 5 sol
@@ -97,6 +96,7 @@ describe('withdraws gems from vault', () => {
 
     const updatedFarmAcc: any = await gf.fetchFarmAcc(gf.farm2.publicKey)
 
+    assert.equal(farmAcc.vaultCount.toNumber() - 1, updatedFarmAcc.vaultCount.toNumber())
     assert.isTrue(updatedFarmAcc.rewardA.funds.totalAccruedToStakers.toNumber() < farmAcc.rewardA.funds.totalAccruedToStakers.toNumber())
   })
 
@@ -129,7 +129,7 @@ describe('withdraws gems from vault', () => {
     const amount = new BN(Math.random() * 500000)
     await gf.callFundReward(amount, gf.farm2.publicKey)
 
-    const { vault } = await gf.callDeposit(gf.farmer1Identity, defaultFixedConfig.schedule.tier3, gf.farm2.publicKey); // requires at least 6 seconds of staking
+    const { vault, farm } = await gf.callDeposit(gf.farmer1Identity, defaultFixedConfig.schedule.tier3, gf.farm2.publicKey); // requires at least 6 seconds of staking
 
     const gemDestination = await gf.findATA(gf.gem1.tokenMint, gf.farmer1Identity.publicKey)
 
@@ -146,10 +146,15 @@ describe('withdraws gems from vault', () => {
 
     const vaultAcc: any = await gf.fetchVaultAcc(vault);
 
+    const farmAcc = await gf.fetchFarmAcc(farm)
+
     await gf.callWithdraw(gf.farmer1Identity, vaultAcc.gemMint, gf.farm2.publicKey)
+
+    const updatedFarmAcc = await gf.fetchFarmAcc(farm)
 
     const destinationAccount = await gf.fetchTokenAcc(gf.gem1.tokenMint, gemDestination)
 
+    assert.equal(farmAcc.vaultCount.toNumber() - 1, updatedFarmAcc.vaultCount.toNumber())
     assert.equal(prevAccount.amount.toNumber() + 1, destinationAccount.amount.toNumber()) // one nft was transfered to this destination
 
     // make sure gem box is closed after withdrawal

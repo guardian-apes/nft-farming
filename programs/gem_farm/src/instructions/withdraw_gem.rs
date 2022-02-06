@@ -127,6 +127,9 @@ pub fn handler(ctx: Context<WithdrawGem>) -> ProgramResult {
     let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
 
+    // decrease farm vault count upfront
+    farm.vault_count.try_sub_assign(1)?;
+
     // calculate pending rewards on vault and transfer
     let now = now_ts()?;
 
@@ -148,7 +151,6 @@ pub fn handler(ctx: Context<WithdrawGem>) -> ProgramResult {
     let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
 
-    farm.decrement_stake_count()?;
 
     // calculate claimed amounts (capped at what's available in the pot)
     let to_claim_a = vault.reward_a.claim_rewards(
