@@ -148,7 +148,7 @@ pub fn handler(ctx: Context<WithdrawGem>) -> ProgramResult {
     let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
 
-    farm.update_staked_count()?;
+    farm.decrement_stake_count()?;
 
     // calculate claimed amounts (capped at what's available in the pot)
     let to_claim_a = vault.reward_a.claim_rewards(

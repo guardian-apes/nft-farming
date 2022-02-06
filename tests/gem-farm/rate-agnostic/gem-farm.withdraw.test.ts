@@ -60,8 +60,8 @@ describe('withdraws gems from vault', () => {
 
     const destinationAccount = await gf.fetchTokenAcc(gf.gem1.tokenMint, gemDestination)
 
-    // make sure vault count is updated
-    assert.equal(farmAccount.vaultCount.toNumber(), updatedFarmAccount.vaultCount.toNumber() - 1)
+    // make sure vault count is updated (reduced by 1 after withdrawal)
+    assert.equal(farmAccount.vaultCount.toNumber() - 1, updatedFarmAccount.vaultCount.toNumber())
     assert.equal(prevAccount.amount.toNumber() + 1, destinationAccount.amount.toNumber()) // one nft was transfered to this destination
 
     // make sure gem box is closed after withdrawal
@@ -73,7 +73,7 @@ describe('withdraws gems from vault', () => {
     await expect( gf.fetchVaultAcc(vault)).to.be.rejectedWith(`Account does not exist ${vault.toBase58()}`);
   });
 
-  it('deposit gem (with paper hands tax) -> wait 5 seconds -> withdraw gem (tier3) -> break bank -> farm reserved updated', async () => {
+  it.only('deposit gem (with paper hands tax) -> wait 5 seconds -> withdraw gem (tier3) -> break bank -> farm reserved updated', async () => {
     // Prep second farm
     const farmConfig = {
       paperHandsTaxLamp: new BN(LAMPORTS_PER_SOL).mul(new BN(5)) // paper hands tax is 5 sol

@@ -109,9 +109,9 @@ impl Farm {
         Ok(())
     }
 
-    pub fn update_staked_count(&mut self) -> ProgramResult {
+    pub fn decrement_stake_count(&mut self) -> ProgramResult {
         // record number of vaults on farm
-        self.vault_count.try_add_assign(1)?;
+        self.vault_count.try_sub_assign(1)?;
 
         Ok(())
     }
@@ -128,9 +128,6 @@ impl Farm {
             .funds
             .total_accrued_to_stakers
             .try_sub_assign(unreserve_amount)?;
-
-        // since we're here let's be sure to reduce the number of vaults on the farm
-        self.vault_count.try_sub_assign(1)?;
 
         Ok(())
     }
