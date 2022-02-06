@@ -159,7 +159,10 @@ fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
     Err(ErrorCode::NotWhitelisted.into())
 }
 
-pub fn handler(ctx: Context<DepositGem>, reward_a_tier_config: Option<TierConfig>) -> ProgramResult {
+pub fn handler(
+    ctx: Context<DepositGem>,
+    reward_a_tier_config: Option<TierConfig>,
+) -> ProgramResult {
     // if even a single whitelist exists, verify the token against it
     let farm = &*ctx.accounts.farm;
     let vault = &*ctx.accounts.vault;
@@ -177,7 +180,10 @@ pub fn handler(ctx: Context<DepositGem>, reward_a_tier_config: Option<TierConfig
     // validate tier_config for fixed reward types.
     // if no tier config was passed, then we use tier0
     if matches!(farm.reward_a.reward_type, RewardType::Fixed) && reward_a_tier_config.is_some() {
-        farm.reward_a.fixed_rate.schedule.assert_valid_tier_config(reward_a_tier_config.unwrap())?;
+        farm.reward_a
+            .fixed_rate
+            .schedule
+            .assert_valid_tier_config(reward_a_tier_config.unwrap())?;
     }
 
     // do the transfer

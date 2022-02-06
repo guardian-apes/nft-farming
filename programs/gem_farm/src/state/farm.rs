@@ -62,7 +62,15 @@ impl Farm {
         Ok(())
     }
 
-    pub fn reserve_rewards(&mut self, vault: &mut Vault, now: u64, reward_a_tier_config: Option<TierConfig>)-> ProgramResult {
+    pub fn reserve_rewards(
+        &mut self,
+        vault: &mut Vault,
+        now: u64,
+        reward_a_tier_config: Option<TierConfig>,
+    ) -> ProgramResult {
+        // Immediately add vault count on this farm.
+        self.vault_count.try_add_assign(1)?;
+
         // let's ignore reward b for now and focus on reward a
         vault.reward_a.staked_at = now;
         vault.reward_a.last_rewards_claimed_at = now;
@@ -75,8 +83,16 @@ impl Farm {
 
         let tier = vault.reward_a.reward_tier;
 
-        let reserved_amount = tier.reward_rate.try_mul(tier.required_tenure)?;
+        // be sure to divide by denominator
+        let reserved_amount = tier
+            .reward_rate
+            .try_div(self.reward_a.fixed_rate.schedule.denominator)?
+            .try_mul(tier.required_tenure)?;
 
+        msg!(
+            "Funded amount in rewards, {}",
+            self.reward_a.funds.pending_amount()?
+        );
         // check the farm funds. we need to have the reserved rewards in farm fund
         if reserved_amount > self.reward_a.funds.pending_amount()? {
             return Err(ErrorCode::InsufficientFunding.into());
@@ -85,19 +101,33 @@ impl Farm {
         vault.reward_a.reserved_amount = reserved_amount;
 
         // update farm reserves
-        self.reward_a.funds.total_accrued_to_stakers.try_add_assign(reserved_amount)?;
+        self.reward_a
+            .funds
+            .total_accrued_to_stakers
+            .try_add_assign(reserved_amount)?;
 
+        Ok(())
+    }
+
+    pub fn update_staked_count(&mut self) -> ProgramResult {
         // record number of vaults on farm
         self.vault_count.try_add_assign(1)?;
 
         Ok(())
     }
 
-    pub fn unreserve_rewards(&mut self, vault: &mut Vault, now: u64)-> ProgramResult {
+    pub fn unreserve_rewards(&mut self, vault: &mut Vault, now: u64) -> ProgramResult {
         // amount we unreserve is total paid out + any outstanding rewards to be paid out
-        let unreserve_amount = vault.reward_a.paid_out_reward.try_add(vault.reward_a.outstanding_reward(now)?)?;
+        let unreserve_amount = vault.reward_a.paid_out_reward.try_add(
+            vault
+                .reward_a
+                .outstanding_reward(now, self.reward_a.fixed_rate.schedule.denominator)?,
+        )?;
 
-        self.reward_a.funds.total_accrued_to_stakers.try_sub_assign(unreserve_amount)?;
+        self.reward_a
+            .funds
+            .total_accrued_to_stakers
+            .try_sub_assign(unreserve_amount)?;
 
         // since we're here let's be sure to reduce the number of vaults on the farm
         self.vault_count.try_sub_assign(1)?;
@@ -148,9 +178,7 @@ pub struct TimeTracker {
     pub lock_end_ts: u64,
 }
 
-impl TimeTracker {
-
-}
+impl TimeTracker {}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]
@@ -173,6 +201,4 @@ pub struct FarmReward {
     pub times: TimeTracker,
 }
 
-impl FarmReward {
-    
-}
+impl FarmReward {}

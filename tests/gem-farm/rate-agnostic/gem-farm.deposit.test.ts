@@ -7,7 +7,8 @@ import {
   GemFarmTester,
 } from '../gem-farm.tester';
 import { BN } from '@project-serum/anchor';
-import { RewardType, VariableRateConfig } from '../gem-farm.client';
+import { FixedRateConfig, RewardType, VariableRateConfig } from '../gem-farm.client';
+import { toBN } from '../../gem-common/types';
 
 chai.use(chaiAsPromised);
 
@@ -180,5 +181,60 @@ describe('depositing gems into vault', () => {
     await expect(
         gf.callDeposit(gf.farmer1Identity)
       ).to.be.rejectedWith('0x140');
+  });
+});
+
+export const customFixedConfig = <FixedRateConfig>{
+  schedule: {
+    //total 30 per gem
+    tier0: {
+      rewardRate: toBN(100),
+      requiredTenure: toBN(0),
+    },
+    tier1: {
+      rewardRate: toBN(500),
+      requiredTenure: toBN(2),
+    },
+    tier2: {
+      rewardRate: toBN(700),
+      requiredTenure: toBN(4),
+    },
+    //leaving this one at 0 so that it's easy to test how much accrued over first 6s
+    tier3: {
+      rewardRate: toBN(900),
+      requiredTenure: toBN(6),
+    },
+    denominator: toBN(10),
+  },
+};
+
+describe('depositing gems into vault (denominator is not one)', () => {
+  let gf = new GemFarmTester();
+
+  beforeEach('preps accs', async () => {
+    await gf.prepAccounts(100000000000, gf.randomInt(1, 3), 0.1); // 0.1 for rewardA
+    await gf.callInitFarm(defaultFarmConfig, customFixedConfig.schedule);
+    await gf.callInitVault(gf.farmer1Identity, gf.gem1.tokenMint);
+    await gf.callInitVault(gf.farmer2Identity, gf.gem2.tokenMint);
+    await gf.callAuthorize();
+    const amount = new BN(Math.random() * 500000)
+    await gf.callFundReward(amount)
+  });
+
+  it('deposits gem into a vault (denominator is not one)', async () => {
+    // change from depositing into gem to depositing into gem box vault
+    const { vault, farm } = await gf.callDeposit(gf.farmer1Identity, customFixedConfig.schedule.tier1);
+    const { vault: vault2 } = await gf.callDeposit(gf.farmer2Identity, customFixedConfig.schedule.tier3);
+    
+    const vaultAcc: any = await gf.fetchVaultAcc(vault);
+    const vault2Acc: any = await gf.fetchVaultAcc(vault2);
+    const farmAcc: any = await gf.fetchFarmAcc(farm);
+
+    const totalReserved = (customFixedConfig.schedule.tier1?.rewardRate?.toNumber()! / customFixedConfig.schedule.denominator.toNumber()) * customFixedConfig.schedule.tier1?.requiredTenure.toNumber()!
+    const totalReservedVault2 = (customFixedConfig.schedule.tier3?.rewardRate?.toNumber()! / customFixedConfig.schedule.denominator.toNumber()) * customFixedConfig.schedule.tier3?.requiredTenure.toNumber()!
+
+    assert.equal(vaultAcc.rewardA.reservedAmount.toNumber(), totalReserved)
+    assert.equal(vault2Acc.rewardA.reservedAmount.toNumber(), totalReservedVault2)
+    assert.equal(farmAcc.rewardA.funds.totalAccruedToStakers.toNumber(), totalReserved + totalReservedVault2)
   });
 });

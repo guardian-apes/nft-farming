@@ -1,12 +1,11 @@
 use anchor_lang::{
-    prelude::*, solana_program::{
-        program::invoke, system_instruction
-    }
+    prelude::*,
+    solana_program::{program::invoke, system_instruction},
 };
 
 use anchor_spl::{
     associated_token::*,
-    token::{self, Mint, Token, TokenAccount, Transfer, CloseAccount}
+    token::{self, CloseAccount, Mint, Token, TokenAccount, Transfer},
 };
 
 use gem_common::{errors::ErrorCode, *};
@@ -124,9 +123,7 @@ impl<'info> WithdrawGem<'info> {
     }
 }
 
-pub fn handler(
-    ctx: Context<WithdrawGem>,
-) -> ProgramResult {
+pub fn handler(ctx: Context<WithdrawGem>) -> ProgramResult {
     let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
 
@@ -141,18 +138,24 @@ pub fn handler(
         if farm.config.paper_hands_tax_lamp > 0 {
             let farm = &*ctx.accounts.farm;
 
-            ctx.accounts.pay_treasury(farm.config.paper_hands_tax_lamp)?;
+            ctx.accounts
+                .pay_treasury(farm.config.paper_hands_tax_lamp)?;
         } else {
             return Err(ErrorCode::TooEarlyToWithdraw.into());
         }
     }
 
+    let farm = &mut ctx.accounts.farm;
     let vault = &mut ctx.accounts.vault;
 
+    farm.update_staked_count()?;
+
     // calculate claimed amounts (capped at what's available in the pot)
-    let to_claim_a = vault
-        .reward_a
-        .claim_rewards(ctx.accounts.reward_a_pot.amount, now)?;
+    let to_claim_a = vault.reward_a.claim_rewards(
+        ctx.accounts.reward_a_pot.amount,
+        now,
+        farm.reward_a.fixed_rate.schedule.denominator,
+    )?;
 
     // transfer remaining rewards if any
     if to_claim_a > 0 {

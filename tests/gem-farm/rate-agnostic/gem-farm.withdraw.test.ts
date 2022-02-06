@@ -33,11 +33,12 @@ describe('withdraws gems from vault', () => {
 
   it('deposit gem -> wait 5 seconds -> withdraw gem (tier0)', async () => {
     // change from depositing into gem to depositing into gem box vault
-    const { vault } = await gf.callDeposit(gf.farmer1Identity);
+    const { vault,farm } = await gf.callDeposit(gf.farmer1Identity);
     await gf.callDeposit(gf.farmer2Identity);
 
     const gemDestination = await gf.findATA(gf.gem1.tokenMint, gf.farmer1Identity.publicKey)
 
+    const farmAccount = await gf.fetchFarmAcc(farm)
     const prevAccount = await gf.fetchTokenAcc(gf.gem1.tokenMint, gemDestination)
     
     const [gemBoxPDA] = await gf.findGemBoxPDA(vault)
@@ -55,8 +56,12 @@ describe('withdraws gems from vault', () => {
 
     await gf.callWithdraw(gf.farmer1Identity, vaultAcc.gemMint)
 
+    const updatedFarmAccount = await gf.fetchFarmAcc(farm)
+
     const destinationAccount = await gf.fetchTokenAcc(gf.gem1.tokenMint, gemDestination)
 
+    // make sure vault count is updated
+    assert.equal(farmAccount.vaultCount.toNumber(), updatedFarmAccount.vaultCount.toNumber() - 1)
     assert.equal(prevAccount.amount.toNumber() + 1, destinationAccount.amount.toNumber()) // one nft was transfered to this destination
 
     // make sure gem box is closed after withdrawal

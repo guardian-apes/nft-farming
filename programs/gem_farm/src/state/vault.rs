@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use gem_common::{errors::ErrorCode, *};
 
-use crate::{state::*};
+use crate::state::*;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]
@@ -18,15 +18,21 @@ pub struct VaultReward {
 }
 
 impl VaultReward {
-    pub fn outstanding_reward(&self, now: u64) -> Result<u64, ProgramError> {
+    pub fn outstanding_reward(&self, now: u64, denominator: u64) -> Result<u64, ProgramError> {
+        // if the required tenure is zero (meaning we're on tier0, we simply calculate and return rewards up to this moment)
+
         // if staking period is over
         let tenure_expiry = self.staked_at.try_add(self.reward_tier.required_tenure)?;
 
-        if now < tenure_expiry {
+        // check if staking period is not over, or user is on tier0. in both cases, compute unclaimed rewards and send along
+        if now < tenure_expiry || self.reward_tier.required_tenure == 0 {
             // this means the farmer is claiming rewards before the lock period is over
             let unclaimed_rewards_time = now.try_sub(self.last_rewards_claimed_at)?;
-    
-            return Ok(unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?);
+
+            let outstanding_rewards =
+                unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?;
+
+            return Ok(outstanding_rewards.try_div(denominator)?);
         }
 
         // in some scenarios, the last_rewards_claimed_at might be more than expiry
@@ -47,17 +53,22 @@ impl VaultReward {
 
         let outstanding_reward = unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?;
 
-        Ok(outstanding_reward)
+        Ok(outstanding_reward.try_div(denominator)?)
     }
 
-    pub fn computed_reward_rate(&self, denominator: u64) -> u64 {
+    pub fn computed_reward_rate(&self, denominator: u64) -> Result<u64, ProgramError> {
         let computed_rate = self.reward_tier.reward_rate.try_div(denominator)?;
 
-        computed_rate
+        Ok(computed_rate)
     }
 
-    pub fn claim_rewards(&mut self, pot_balance: u64, now: u64) -> Result<u64, ProgramError> {
-        let outstanding = self.outstanding_reward(now)?;
+    pub fn claim_rewards(
+        &mut self,
+        pot_balance: u64,
+        now: u64,
+        denominator: u64,
+    ) -> Result<u64, ProgramError> {
+        let outstanding = self.outstanding_reward(now, denominator)?;
 
         // if we currently can't pay the funder, let's throw an error
         if outstanding > pot_balance {
@@ -86,7 +97,7 @@ pub struct Vault {
 
     pub authority_bump_seed: [u8; 1],
 
-    /// after depositing one gem, we'll set locked to true. This vault can no longer be used to deposit gems. 
+    /// after depositing one gem, we'll set locked to true. This vault can no longer be used to deposit gems.
     /// one gem, one vault
     pub locked: bool,
 
@@ -102,9 +113,13 @@ impl Vault {
         [self.authority_seed.as_ref(), &self.authority_bump_seed]
     }
 
-    pub fn attempting_to_break_bank(&self, now: u64, ) -> Result<bool, ProgramError> {
+    pub fn attempting_to_break_bank(&self, now: u64) -> Result<bool, ProgramError> {
         // add tier required tenure to time staking started
-        let time_since_staked = self.reward_a.reward_tier.required_tenure.try_add(self.reward_a.staked_at)?;
+        let time_since_staked = self
+            .reward_a
+            .reward_tier
+            .required_tenure
+            .try_add(self.reward_a.staked_at)?;
 
         if now > time_since_staked {
             return Ok(false);

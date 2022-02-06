@@ -72,13 +72,16 @@ impl<'info> ClaimReward<'info> {
 pub fn handler(ctx: Context<ClaimReward>) -> ProgramResult {
     // update accrued rewards before claiming
     let vault = &mut ctx.accounts.vault;
+    let farm = &mut ctx.accounts.farm;
 
     let now = now_ts()?;
 
     // calculate claimed amounts (capped at what's available in the pot)
-    let to_claim_a = vault
-        .reward_a
-        .claim_rewards(ctx.accounts.reward_a_pot.amount, now)?;
+    let to_claim_a = vault.reward_a.claim_rewards(
+        ctx.accounts.reward_a_pot.amount,
+        now,
+        farm.reward_a.fixed_rate.schedule.denominator,
+    )?;
 
     // // do the transfers
     if to_claim_a > 0 {
