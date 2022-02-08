@@ -12,7 +12,7 @@ pub struct WhitelistProof {
 
     pub whitelisted_address: Pubkey,
 
-    pub bank: Pubkey,
+    pub farm: Pubkey,
 }
 
 impl WhitelistProof {

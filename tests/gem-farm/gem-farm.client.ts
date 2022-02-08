@@ -415,6 +415,32 @@ export class GemFarmClient extends GemBankClient {
     };
   }
 
+  async whitelistCreator(farm: PublicKey, farmManager: Keypair, creatorToWhitelist: PublicKey) {
+    const [whitelistProof, whitelistProofBump] = await this.findWhitelistProofPDA(farm, creatorToWhitelist)
+  
+    const txSig = await this.farmProgram.rpc.whitelistCreator(
+      whitelistProofBump,
+      {
+        accounts: {
+          farm,
+          farmManager: farmManager.publicKey,
+          whitelistProof,
+          creatorToWhitelist,
+          systemProgram: SystemProgram.programId,
+        },
+        signers: [farmManager]
+      }
+    )
+
+    return {
+      txSig,
+      whitelistProof,
+      whitelistProofBump,
+      farm,
+      farmManager
+    }
+  }
+
   async withdrawGemFromVault(
     farm: PublicKey,
     vaultOwner: Keypair,
@@ -724,6 +750,14 @@ export class GemFarmClient extends GemBankClient {
       farm,
       creator,
       mint
+    ]);
+  }
+
+  async findWhitelistProofPDA(bank: PublicKey, whitelistedAddress: PublicKey) {
+    return this.findProgramAddress(this.farmProgram.programId, [
+      'whitelist',
+      bank,
+      whitelistedAddress,
     ]);
   }
 }

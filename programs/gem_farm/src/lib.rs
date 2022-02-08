@@ -50,6 +50,13 @@ pub mod gem_farm {
         instructions::fund_reward::handler(ctx, amount)
     }
 
+    pub fn whitelist_creator(
+        ctx: Context<WhiteListCreator>,
+        _bump: u8,
+    ) -> ProgramResult {
+        instructions::whitelist_creator::handler(ctx)
+    }
+
     pub fn payout_from_treasury(
         ctx: Context<TreasuryPayout>,
         _bump_auth: u8,

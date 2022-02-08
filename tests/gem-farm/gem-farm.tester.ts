@@ -12,7 +12,7 @@ import {
   TierConfig,
   VariableRateConfig,
 } from './gem-farm.client';
-import { Token } from '@solana/spl-token';
+import { Token, AccountInfo } from '@solana/spl-token';
 import { ITokenData } from '../gem-common/account-utils';
 import { assert } from 'chai';
 import { WhitelistType } from '../gem-bank/gem-bank.client';
@@ -242,6 +242,10 @@ export class GemFarmTester extends GemFarmClient {
     return this.withdrawGemFromVault(farm || this.farm.publicKey, identity, mint, this.rewardMint.publicKey)
   }
 
+  async callWhitelistCreator(creator: PublicKey, farm?: PublicKey, manager?: Keypair) {
+    return this.whitelistCreator(farm || this.farm.publicKey, manager || this.farmManager, creator)
+  }
+
   async callDeposit(identity: Keypair, tierSchedule: TierConfig|null = null, farm?: PublicKey) {
     const isFarmer1 =
       identity.publicKey.toBase58() ===
@@ -444,5 +448,9 @@ export class GemFarmTester extends GemFarmClient {
 
   async mintMoreRewards(amount: number) {
     await this.rewardMint.mintTo(this.rewardSource, this.funder, [], amount);
+  }
+
+  async fetchGemAcc(mint: PublicKey, gemAcc: PublicKey): Promise<AccountInfo> {
+    return this.deserializeTokenAccount(mint, gemAcc);
   }
 }

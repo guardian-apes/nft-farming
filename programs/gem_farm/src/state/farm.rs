@@ -40,8 +40,6 @@ pub struct Farm {
     // ----------------- rewards
     pub reward_a: FarmReward,
 
-    /// only gems allowed will be those that have EITHER a:
-    /// 1) creator from this list
     pub whitelisted_creators: u32,
 
     /// total vault count registered with this bank
