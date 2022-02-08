@@ -18,6 +18,7 @@ export const RewardType = {
 
 export interface FarmConfig {
   paperHandsTaxLamp: BN;
+  whitelistedCandyMachine?: PublicKey
 }
 
 export interface TierConfig {
@@ -226,14 +227,14 @@ export class GemFarmClient extends GemBankClient {
     const signers = [farm];
     if (isKp(farmManager)) signers.push(<Keypair>farmManager);
 
-    console.log('starting farm at', farm.publicKey.toBase58());
+    console.log('starting farm at', farm.publicKey.toBase58(), 'whitelisting candy machine', farmConfig?.whitelistedCandyMachine?.toBase58());
     const txSig = await this.farmProgram.rpc.initFarm(
       farmAuthBump,
       farmTreasuryBump,
       rewardAPotBump,
       rewardAType,
       fixedRateScheduleA,
-      farmConfig,
+      {...farmConfig, whitelistedCandyMachine: farmConfig.whitelistedCandyMachine ? farmConfig.whitelistedCandyMachine : null},
       {
         accounts: {
           farm: farm.publicKey,
@@ -413,32 +414,6 @@ export class GemFarmClient extends GemBankClient {
       rewardADestination,
       txSig,
     };
-  }
-
-  async whitelistCreator(farm: PublicKey, farmManager: Keypair, creatorToWhitelist: PublicKey) {
-    const [whitelistProof, whitelistProofBump] = await this.findWhitelistProofPDA(farm, creatorToWhitelist)
-  
-    const txSig = await this.farmProgram.rpc.whitelistCreator(
-      whitelistProofBump,
-      {
-        accounts: {
-          farm,
-          farmManager: farmManager.publicKey,
-          whitelistProof,
-          creatorToWhitelist,
-          systemProgram: SystemProgram.programId,
-        },
-        signers: [farmManager]
-      }
-    )
-
-    return {
-      txSig,
-      whitelistProof,
-      whitelistProofBump,
-      farm,
-      farmManager
-    }
   }
 
   async withdrawGemFromVault(

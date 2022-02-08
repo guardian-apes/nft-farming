@@ -87,76 +87,28 @@ fn assert_valid_metadata(
     Metadata::from_account_info(gem_metadata)
 }
 
-fn assert_valid_whitelist_proof<'info>(
-    whitelist_proof: &AccountInfo<'info>,
-    farm: &Pubkey,
-    address_to_whitelist: &Pubkey,
-    program_id: &Pubkey,
-    expected_whitelist_type: WhitelistType,
-) -> ProgramResult {
-    // 1 verify the PDA seeds match
-    let seed = &[
-        b"whitelist".as_ref(),
-        farm.as_ref(),
-        address_to_whitelist.as_ref(),
-    ];
-    let (whitelist_addr, _bump) = Pubkey::find_program_address(seed, program_id);
-
-    // we can't use an assert_eq statement, we want to catch this error and continue along to creator testing
-    if whitelist_addr != whitelist_proof.key() {
-        return Err(ErrorCode::NotWhitelisted.into());
-    }
-
-    // 2 no need to verify ownership, deserialization does that for us
-    // https://github.com/project-serum/anchor/blob/fcb07eb8c3c9355f3cabc00afa4faa6247ccc960/lang/src/account.rs#L36
-    let proof = Account::<'info, WhitelistProof>::try_from(whitelist_proof)?;
-
-    // 3 verify whitelist type matches
-    proof.contains_type(expected_whitelist_type)
-}
-
 fn assert_whitelisted(ctx: &Context<DepositGem>) -> ProgramResult {
     let farm = &*ctx.accounts.farm;
     let mint = &*ctx.accounts.gem_mint;
     let remaining_accs = &mut ctx.remaining_accounts.iter();
 
-    // if mint verification above failed, attempt to verify based on creator
-    if farm.whitelisted_creators > 0 {
-        // 2 additional accounts are expected - metadata and creator whitelist proof
-        let metadata_info = next_account_info(remaining_accs)?;
-        let creator_whitelist_proof_info = next_account_info(remaining_accs)?;
+    // we expect only one remaining account, which is the metadata info
+    let metadata_info = next_account_info(remaining_accs)?;
 
-        // verify metadata is legit
-        let metadata = assert_valid_metadata(metadata_info, &mint.key())?;
+    // verify metadata is legit
+    let metadata = assert_valid_metadata(metadata_info, &mint.key())?;
 
-        // metaplex constraints this to max 5, so won't go crazy on compute
-        // (empirical testing showed there's practically 0 diff between stopping at 0th and 5th creator)
-        for creator in &metadata.data.creators.unwrap() {
-            // verify creator actually signed off on this nft
-            if !creator.verified {
-                continue;
-            }
+    let whitelisted_candy_machine = farm.config.whitelisted_candy_machine.unwrap();
 
-            // check if creator is whitelisted, returns an error if not
-            let attempted_proof = assert_valid_whitelist_proof(
-                creator_whitelist_proof_info,
-                &farm.key(),
-                &creator.address,
-                ctx.program_id,
-                WhitelistType::CREATOR,
-            );
+    let creators = &metadata.data.creators.unwrap();
 
-            match attempted_proof {
-                //proof succeeded, return out of the function, no need to continue looping
-                Ok(()) => return Ok(()),
-                //proof failed, continue to check next creator
-                Err(_e) => continue,
-            }
-        }
+    let on_chain_candy_machine = creators.first().unwrap();
+
+    if whitelisted_candy_machine.key() != on_chain_candy_machine.address {
+        return Err(ErrorCode::NotWhitelisted.into());
     }
 
-    // if both conditions above failed tok return Ok(()), then verification failed
-    Err(ErrorCode::NotWhitelisted.into())
+    Ok(())
 }
 
 pub fn handler(
@@ -173,7 +125,8 @@ pub fn handler(
         return Err(ErrorCode::VaultAccessSuspended.into());
     }
 
-    if farm.whitelisted_creators > 0 {
+    // Verify the candy machine for the gem about to be deposited is whitelisted.
+    if farm.config.whitelisted_candy_machine.is_some() {
         assert_whitelisted(&ctx)?;
     }
 

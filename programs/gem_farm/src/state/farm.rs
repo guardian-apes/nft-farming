@@ -9,6 +9,7 @@ pub const LATEST_FARM_VERSION: u16 = 0;
 #[derive(Debug, Copy, Clone, AnchorSerialize, AnchorDeserialize)]
 pub struct FarmConfig {
     pub paper_hands_tax_lamp: u64,
+    pub whitelisted_candy_machine: Option<Pubkey>
 }
 
 #[repr(C)]
@@ -39,8 +40,6 @@ pub struct Farm {
 
     // ----------------- rewards
     pub reward_a: FarmReward,
-
-    pub whitelisted_creators: u32,
 
     /// total vault count registered with this bank
     pub vault_count: u64,

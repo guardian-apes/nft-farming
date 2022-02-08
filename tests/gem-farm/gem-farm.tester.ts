@@ -183,6 +183,10 @@ export class GemFarmTester extends GemFarmClient {
     return this.fetchFarmAcc(this.farm.publicKey);
   }
 
+  async fetchFarm2() {
+    return this.fetchFarmAcc(this.farm2.publicKey);
+  }
+
   async fetchTreasuryBal() {
     return this.fetchTreasuryBalance(this.farm.publicKey);
   }
