@@ -15,6 +15,9 @@ pub struct VaultReward {
     pub reward_tier: TierConfig,
 
     pub last_rewards_claimed_at: u64,
+
+
+    pub __debug: u64,
 }
 
 impl VaultReward {
@@ -30,9 +33,9 @@ impl VaultReward {
             let unclaimed_rewards_time = now.try_sub(self.last_rewards_claimed_at)?;
 
             let outstanding_rewards =
-                unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?;
+                unclaimed_rewards_time.try_mul(self.computed_reward_rate(denominator)?)?;
 
-            return Ok(outstanding_rewards.try_div(denominator)?);
+            return Ok(outstanding_rewards);
         }
 
         // in some scenarios, the last_rewards_claimed_at might be more than expiry
@@ -77,6 +80,8 @@ impl VaultReward {
 
         self.last_rewards_claimed_at = now;
         self.paid_out_reward.try_add_assign(outstanding)?;
+
+        self.__debug = now;
 
         Ok(outstanding)
     }

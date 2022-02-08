@@ -84,6 +84,7 @@ pub fn handler(ctx: Context<ClaimReward>) -> ProgramResult {
     )?;
 
     // // do the transfers
+    msg!("claiming {} rewards ", to_claim_a);
     if to_claim_a > 0 {
         token::transfer(
             ctx.accounts
