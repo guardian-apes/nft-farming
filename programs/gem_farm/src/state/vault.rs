@@ -15,9 +15,6 @@ pub struct VaultReward {
     pub reward_tier: TierConfig,
 
     pub last_rewards_claimed_at: u64,
-
-
-    pub __debug: u64,
 }
 
 impl VaultReward {
@@ -27,10 +24,15 @@ impl VaultReward {
         // if staking period is over
         let tenure_expiry = self.staked_at.try_add(self.reward_tier.required_tenure)?;
 
+        msg!("calculated tenure expiry of {}", tenure_expiry);
+        msg!("self.last_rewards_claimed_at of {}", self.last_rewards_claimed_at);
+
         // check if staking period is not over, or user is on tier0. in both cases, compute unclaimed rewards and send along
         if now < tenure_expiry || self.reward_tier.required_tenure == 0 {
             // this means the farmer is claiming rewards before the lock period is over
             let unclaimed_rewards_time = now.try_sub(self.last_rewards_claimed_at)?;
+
+            msg!("calculated unclaimed_rewards_time of {}", unclaimed_rewards_time);
 
             let outstanding_rewards =
                 unclaimed_rewards_time.try_mul(self.computed_reward_rate(denominator)?)?;
@@ -46,6 +48,7 @@ impl VaultReward {
         // but the next claim is going to have some problems, because the
         // last_rewards_claimed_at is now more than tenure_expiry and we cannot subtract them anymore
         if self.last_rewards_claimed_at > tenure_expiry {
+            msg!("self.last_rewards_claimed_at of {} vs tenure expiry of {} resulted in zero tokens to claim", self.last_rewards_claimed_at, tenure_expiry);
             // this is a scenario where the user has claimed tokens after expiry.
             // meaning they have nothing else to claim
             // so we return zero
@@ -56,11 +59,14 @@ impl VaultReward {
 
         let outstanding_reward = unclaimed_rewards_time.try_mul(self.reward_tier.reward_rate)?;
 
+        msg!("unclaimed_rewards_time calculated as {}", unclaimed_rewards_time);
+
         Ok(outstanding_reward.try_div(denominator)?)
     }
 
     pub fn computed_reward_rate(&self, denominator: u64) -> Result<u64, ProgramError> {
         let computed_rate = self.reward_tier.reward_rate.try_div(denominator)?;
+        msg!("Computed reward rate of {} from a denominator of {} and reward tier rate of {}", computed_rate, denominator, self.reward_tier.reward_rate);
 
         Ok(computed_rate)
     }
@@ -73,6 +79,8 @@ impl VaultReward {
     ) -> Result<u64, ProgramError> {
         let outstanding = self.outstanding_reward(now, denominator)?;
 
+        msg!("calculated outstanding rewards of {} ", outstanding);
+
         // if we currently can't pay the funder, let's throw an error
         if outstanding > pot_balance {
             return Err(ErrorCode::InsufficientFunding.into());
@@ -80,8 +88,6 @@ impl VaultReward {
 
         self.last_rewards_claimed_at = now;
         self.paid_out_reward.try_add_assign(outstanding)?;
-
-        self.__debug = now;
 
         Ok(outstanding)
     }
